@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "pnpm --filter @orgpay/api dev",
     "dev:worker": "pnpm --filter @orgpay/api dev:worker",
+    "dev:web": "pnpm --filter @orgpay/web dev",
+    "build:web": "pnpm --filter @orgpay/web build",
     "build": "pnpm --filter @orgpay/api build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
