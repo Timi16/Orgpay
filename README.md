@@ -11,11 +11,11 @@ submits it and checks the ledger record against the payment before calling it su
 |---|---|
 | Design | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | API, worker, tests | [docs/BACKEND.md](docs/BACKEND.md) |
-| Dashboard (not built yet) | [docs/FRONTEND.md](docs/FRONTEND.md) |
+| Dashboard | [docs/FRONTEND.md](docs/FRONTEND.md) |
 | Testnet proof | [docs/TRANSACTIONS.md](docs/TRANSACTIONS.md): six payments, six verified transactions |
 
-`apps/api` is the backend (API + worker); `packages/shared` holds the schemas shared with the
-dashboard.
+`apps/api` is the backend (API + worker); `apps/web` is the Next.js dashboard; `packages/shared` holds
+the schemas both use.
 
 ## Run it locally
 
@@ -28,10 +28,14 @@ pnpm db:up                      # Postgres 16 on localhost:5437
 pnpm --filter @orgpay/api db:deploy
 pnpm dev                        # API on http://127.0.0.1:4400 (reference at /docs)
 pnpm dev:worker                 # confirmer, notifier, housekeeping
+cp apps/web/.env.example apps/web/.env.local
+pnpm dev:web                    # dashboard on http://localhost:3400 (talks to the API on :4400)
 pnpm seed                       # optional: demo@orgpay.local / demo-password-123 (employees + a draft)
 ```
 
-`GET http://127.0.0.1:4400/health` answers `{"status":"ok","db":"up","network":"testnet",...}`.
+`GET http://127.0.0.1:4400/health` answers `{"status":"ok","db":"up","network":"testnet",...}`. Paying from the dashboard
+needs the Freighter extension on Testnet, holding the funding wallet's account. The API only accepts the
+dashboard from `WEB_ORIGIN` (`http://localhost:3400` in `.env.example`).
 
 ## The workflow, through the API
 
@@ -70,3 +74,7 @@ Funds a wallet with Friendbot, buys Circle Testnet USDC on the DEX, pays six fre
 transaction each (one without a trustline fails first, then succeeds after a retry), repeats requests
 to show nothing is paid twice, re-reads every hash from Horizon, checks balances, and writes
 [docs/TRANSACTIONS.md](docs/TRANSACTIONS.md). Takes about a minute.
+
+Then `node apps/web/e2e/smoke.mjs` drives the real dashboard in Chrome against the running API and
+Testnet: signs up in the UI, pays a two-person run, and checks the run page, explorer links and the
+Verify dialog (screenshots in `apps/web/e2e/shots`).

@@ -5,13 +5,17 @@ executes them with Freighter, and tracks every payment to a verified Stellar tra
 [ARCHITECTURE.md](ARCHITECTURE.md) for statuses and the payment lifecycle, and
 [BACKEND.md](BACKEND.md) for the API.
 
-**Status:** not built yet. Everything it needs from the API is built and tested.
+**Status:** built in `apps/web` (Next.js 16), on port 3400, against the API on 4400. Started from PayBridge's
+dashboard and moved onto OrgPay's API: payments and transactions, the spec's statuses, Idempotency-Key on
+every write (one per dialog for run creation), the payments-per-transaction choice, and a Verify dialog
+backed by `GET /v1/payments/:id/verify`. Some routes keep PayBridge's paths: `/people` (Employees),
+`/payroll` (runs), `/login`, `/signup`. `apps/web/e2e/smoke.mjs` checks the whole flow in Chrome.
 
 ## Stack
 
 Next.js 16 (App Router), React 19, TypeScript strict, SWR for data, `@stellar/freighter-api` 6 for
-signing, `@orgpay/shared` for Zod schemas, amount helpers and types. The visual system is the "Pay
-stub" design from PayBridge, in `apps/web/DESIGN.md`.
+signing, `@orgpay/shared` for Zod schemas, amount helpers and types. The visual system is "Ledger tree",
+in `apps/web/DESIGN.md`.
 
 ```
 apps/web/
