@@ -5,7 +5,7 @@ export const TEST_WEB_ORIGIN = "https://orgpay.test";
 
 Object.assign(process.env, {
   NODE_ENV: "test",
-  PORT: "4300",
+  PORT: "4400",
   DATABASE_URL: inject("databaseUrl"),
   HORIZON_URL: "http://127.0.0.1:1",
   NETWORK_PASSPHRASE: "Test SDF Network ; September 2015",

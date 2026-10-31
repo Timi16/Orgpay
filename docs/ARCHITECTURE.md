@@ -215,7 +215,7 @@ position, and the destination and amount match the payment row.
 | 7 | A transaction that fails on the ledger records its ledger | It gets an explorer link and counts towards the wallet's used sequence numbers (PayBridge's sequence floor skipped it). |
 | 8 | `pnpm proof` against **real** Circle Testnet USDC, six employees, one transaction each (PayBridge's scenario minted its own "USDC" and paid three) | The required Testnet evidence: [TRANSACTIONS.md](TRANSACTIONS.md). |
 | 9 | Seed creates employees and a draft only | The dashboard must never show payment history that isn't a real, verified transaction. |
-| 10 | Branding: PayBridge → OrgPay (`op_session`, `op_device`, `op_test_` key prefix; API port 4300, dev DB port 5437) | Product name; runs next to PayBridge. |
+| 10 | Branding: PayBridge → OrgPay (`op_session`, `op_device`, `op_test_` key prefix; API port 4400, dev DB port 5437) | Product name; runs next to PayBridge. |
 
 Carried over unchanged: auth and sessions, funding-wallet checks, groups, CSV import, API keys, email
 notifications and rate limits. Groups, CSV import, API keys and emails go beyond the spec; they stay

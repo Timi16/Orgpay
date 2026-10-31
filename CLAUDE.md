@@ -27,7 +27,7 @@ the same commit.
 
 ## Layout
 
-- `apps/api`: one codebase, two processes: `src/server.ts` (API, port 4300) and `src/worker.ts`.
+- `apps/api`: one codebase, two processes: `src/server.ts` (API, port 4400) and `src/worker.ts`.
   Layering routes → service → repo; repos take `companyId` first. In the database a payment is a
   `PayrollItem` and a transaction a `PayrollBatch`; the API says payments and transactions.
 - `packages/shared`: Zod schemas, amount helpers and types shared with the web app.

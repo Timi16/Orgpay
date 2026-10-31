@@ -26,12 +26,12 @@ pnpm install
 cp .env.example .env            # then set SESSION_SECRET: openssl rand -hex 32
 pnpm db:up                      # Postgres 16 on localhost:5437
 pnpm --filter @orgpay/api db:deploy
-pnpm dev                        # API on http://127.0.0.1:4300 (reference at /docs)
+pnpm dev                        # API on http://127.0.0.1:4400 (reference at /docs)
 pnpm dev:worker                 # confirmer, notifier, housekeeping
 pnpm seed                       # optional: demo@orgpay.local / demo-password-123 (employees + a draft)
 ```
 
-`GET http://127.0.0.1:4300/health` answers `{"status":"ok","db":"up","network":"testnet",...}`.
+`GET http://127.0.0.1:4400/health` answers `{"status":"ok","db":"up","network":"testnet",...}`.
 
 ## The workflow, through the API
 

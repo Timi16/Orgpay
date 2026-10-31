@@ -31,7 +31,7 @@ const validEnv = {
 
 describe("config/env", () => {
   it("accepts a valid testnet configuration and applies defaults", () => {
-    expect(loadEnv(validEnv)).toMatchObject({ PORT: 4300, NODE_ENV: "development", LOG_LEVEL: "info", BATCH_WINDOW_SECONDS: 300 });
+    expect(loadEnv(validEnv)).toMatchObject({ PORT: 4400, NODE_ENV: "development", LOG_LEVEL: "info", BATCH_WINDOW_SECONDS: 300 });
   });
 
   it("S4: refuses to boot on any network but testnet", () => {

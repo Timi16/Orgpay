@@ -15,7 +15,7 @@ express-rate-limit, cookie-parser, argon2, pino. Tests: Vitest, supertest, Testc
 apps/api/
   prisma/schema.prisma, prisma/migrations/
   src/
-    server.ts                API process (port 4300)
+    server.ts                API process (port 4400)
     worker.ts                worker process: confirmer, notifier, housekeeping
     app.ts                   buildApp(), used by the server, the tests and the proof
     config/env.ts            Zod-validated env; refuses any non-testnet passphrase
@@ -232,7 +232,7 @@ One `orgpay-worker` process. Never run two.
 
 ## Environment
 
-`NODE_ENV`, `PORT` (4300), `HOST`, `DATABASE_URL`, `HORIZON_URL`, `NETWORK_PASSPHRASE` (Testnet only),
+`NODE_ENV`, `PORT` (4400), `HOST`, `DATABASE_URL`, `HORIZON_URL`, `NETWORK_PASSPHRASE` (Testnet only),
 `USDC_ISSUER`, `WEB_ORIGIN` (no trailing slash), `SESSION_SECRET` (64 hex), `SMTP_URL?`, `MAIL_FROM`,
 `EMAIL_VERIFICATION`, `BATCH_WINDOW_SECONDS` (300), `ALERT_TELEGRAM_*?`, `LOG_LEVEL`. See
 `.env.example`.
