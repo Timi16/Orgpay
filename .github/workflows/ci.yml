@@ -1,0 +1,64 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: orgpay
+          POSTGRES_PASSWORD: orgpay
+          POSTGRES_DB: orgpay_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U orgpay" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://orgpay:orgpay@localhost:5432/orgpay_test
+      DATABASE_URL: postgresql://orgpay:orgpay@localhost:5432/orgpay_test
+      NEXT_PUBLIC_API_URL: https://api.orgpay.example
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Ignored advisories are listed, with the reason, under auditConfig in pnpm-workspace.yaml.
+      - run: pnpm audit --prod --audit-level high
+      - run: pnpm --filter @orgpay/api exec prisma generate
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm build:web
+      # Never run `pnpm proof` here: it needs Friendbot, Horizon and a funded Testnet wallet.
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy over SSH (pull, migrate, build, pm2 reload, health check, roll back on failure)
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          # Where the repo lives on the server; set the DEPLOY_PATH repository variable to change it.
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '~/orgpay' }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$SSH_KEY" ] || [ -z "$HOST" ] || [ -z "$USER" ]; then
+            echo "::notice::Deploy skipped: set the DEPLOY_SSH_KEY, DEPLOY_HOST and DEPLOY_USER secrets to deploy from CI."
+            exit 0
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy "$USER@$HOST" "cd $DEPLOY_PATH && ./deploy/deploy.sh $SHA"

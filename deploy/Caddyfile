@@ -1,0 +1,21 @@
+# OrgPay behind Caddy (automatic HTTPS). Put this in /etc/caddy/Caddyfile, or import it, and set
+# ORGPAY_DOMAIN (e.g. useorgpay.xyz) in Caddy's environment, or replace {$ORGPAY_DOMAIN} below.
+# The dashboard and the API must share the registrable domain so the session cookie is sent.
+# The API trusts exactly ONE proxy hop (this one): keep Cloudflare's proxy off (DNS only).
+
+# The dashboard: https://app.<domain>   (WEB_ORIGIN in .env must be exactly this)
+app.{$ORGPAY_DOMAIN} {
+	encode gzip zstd
+	reverse_proxy 127.0.0.1:3400
+}
+
+# The API: https://api.<domain>   (NEXT_PUBLIC_API_URL in apps/web/.env.production)
+api.{$ORGPAY_DOMAIN} {
+	encode gzip zstd
+	reverse_proxy 127.0.0.1:4400
+}
+
+# The bare domain sends people to the dashboard's landing page.
+{$ORGPAY_DOMAIN}, www.{$ORGPAY_DOMAIN} {
+	redir https://app.{$ORGPAY_DOMAIN}{uri} permanent
+}

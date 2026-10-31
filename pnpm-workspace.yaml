@@ -17,3 +17,9 @@ overrides:
   qs: ">=6.16.1 <7"
   ip-address: ">=10.7.4 <11"
   follow-redirects: ">=1.16.2 <2"
+auditConfig:
+  ignoreGhsas:
+    # zod 3 memory exhaustion on oversized constrained collections: fixed only in zod 4, which this
+    # codebase (and zod-to-openapi 7) doesn't use yet. Request bodies are capped at 50 KB (200 KB for
+    # employee import) before zod sees them, which bounds the input. Revisit when moving to zod 4.
+    - GHSA-mrhx-c7xc-m3w5

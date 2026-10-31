@@ -1,0 +1,34 @@
+# Postgres for OrgPay on the server, in Docker. Only the database runs here; the API, the worker
+# and the dashboard run under pm2 (ecosystem.config.cjs) and reach it on localhost.
+#
+#   docker compose up -d        (run from the repo root, next to .env)
+#
+# The password comes from POSTGRES_PASSWORD in .env, which must match the one in DATABASE_URL:
+#   DATABASE_URL=postgresql://orgpay:<password>@localhost:5438/orgpay
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: orgpay-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: orgpay
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: orgpay
+    ports:
+      # Localhost only: never reachable from the internet (Docker's published ports bypass ufw,
+      # so the 127.0.0.1 here is what keeps it private). 5438 so it can't clash with the dev
+      # database (5437) or another Postgres on 5432.
+      - "127.0.0.1:5438:5432"
+    volumes:
+      - orgpay-pg:/var/lib/postgresql/data
+    mem_limit: 384m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orgpay -d orgpay"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+volumes:
+  orgpay-pg:

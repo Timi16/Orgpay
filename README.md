@@ -10,6 +10,7 @@ submits it and checks the ledger record against the payment before calling it su
 | | |
 |---|---|
 | Design | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Deploying to a server | [docs/DEPLOY.md](docs/DEPLOY.md) |
 | API, worker, tests | [docs/BACKEND.md](docs/BACKEND.md) |
 | Dashboard | [docs/FRONTEND.md](docs/FRONTEND.md) |
 | Testnet proof | [docs/TRANSACTIONS.md](docs/TRANSACTIONS.md): six payments, six verified transactions |
