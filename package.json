@@ -1,0 +1,23 @@
+{
+  "name": "orgpay",
+  "private": true,
+  "packageManager": "pnpm@12.8.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @orgpay/api dev",
+    "dev:worker": "pnpm --filter @orgpay/api dev:worker",
+    "build": "pnpm --filter @orgpay/api build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm --filter @orgpay/api test",
+    "format": "prettier --write .",
+    "db:up": "docker compose -f docker-compose.dev.yml up -d",
+    "scenario": "pnpm --filter @orgpay/api scenario",
+    "seed": "pnpm --filter @orgpay/api seed"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.0"
+  }
+}

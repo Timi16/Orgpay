@@ -1,0 +1,19 @@
+# Local development database. Start with: pnpm db:up
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: orgpay
+      POSTGRES_PASSWORD: orgpay
+      POSTGRES_DB: orgpay
+    ports:
+      - "127.0.0.1:5437:5432"
+    volumes:
+      - orgpay-dev-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orgpay -d orgpay"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  orgpay-dev-pg:
