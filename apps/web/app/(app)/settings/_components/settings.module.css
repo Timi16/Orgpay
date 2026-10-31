@@ -1,0 +1,91 @@
+/* Settings: layout and motion that the global kit does not cover. */
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 14px; align-items: start; }
+.column { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.column > * { min-width: 0; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 12px; align-items: start; }
+
+/* Header Save: a ring breathes behind the button while there are unsaved changes. */
+.saveWrap { position: relative; display: inline-flex; border-radius: 10px; }
+.saveWrap::before { content: ""; position: absolute; inset: 0; border-radius: 10px; background: var(--brand); opacity: 0; pointer-events: none; }
+.saveDirty::before { animation: save-ring 1.8s ease-out infinite; }
+.saveWrap > button { position: relative; }
+@keyframes save-ring { 0% { transform: scale(1); opacity: 0.35; } 70%, 100% { transform: scale(1.12, 1.35); opacity: 0; } }
+.discard { animation: fade-in 0.25s ease-out both; }
+@keyframes fade-in { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: none; } }
+
+/* Switch */
+.switch { width: 44px; height: 26px; padding: 0; border: none; border-radius: 999px; position: relative; flex-shrink: 0; background: var(--border-input); transition: background-color 0.2s var(--ease-out); }
+.switch[aria-checked="true"] { background: var(--brand); }
+.knob { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.3); transition: transform 0.32s var(--ease-spring); }
+.switch[aria-checked="true"] .knob { transform: translateX(18px); }
+.switch:active .knob { transform: scaleX(1.15); }
+.switch[aria-checked="true"]:active .knob { transform: translateX(16px) scaleX(1.15); }
+.switchRow { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--border-soft); }
+.switchRow:last-child { border-bottom: none; }
+
+/* Wallet rows */
+.walletList { position: relative; display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.walletRow { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--border-soft); animation: row-in 0.4s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 60ms); }
+.walletFresh { animation: row-fresh 0.5s var(--ease-spring) both, row-flash 1.8s ease-out 0.2s; border-radius: 8px; }
+.walletLeaving { overflow: hidden; pointer-events: none; animation: row-out 0.34s var(--ease-out) forwards; }
+@keyframes row-in { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: none; } }
+@keyframes row-fresh { from { opacity: 0; transform: translateY(-14px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes row-flash { from { background-color: var(--brand-tint); } to { background-color: transparent; } }
+@keyframes row-out { from { opacity: 1; transform: none; max-height: 160px; } to { opacity: 0; transform: translateX(28px); max-height: 0; padding-top: 0; padding-bottom: 0; border-bottom-width: 0; } }
+.walletIcon { width: 36px; height: 36px; border-radius: 10px; background: var(--brand-tint); color: var(--brand-dark); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: transform 0.25s var(--ease-spring); }
+.walletRow:hover .walletIcon { transform: rotate(-6deg) scale(1.06); }
+.badge { display: inline-block; padding: 2px 7px; border-radius: 6px; background: var(--row); border: 1px solid var(--border); color: var(--slate); font-size: 11px; font-weight: 700; }
+.iconBtn { width: 34px; height: 34px; border: none; background: transparent; color: var(--slate); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background-color 0.12s, transform 0.2s var(--ease-spring); }
+.iconBtn:hover { background: var(--row); transform: scale(1.1); }
+.copied { color: var(--good); animation: tick 0.3s var(--ease-spring); }
+@keyframes tick { from { transform: scale(0.5); } to { transform: scale(1); } }
+.rowActions { display: flex; flex-wrap: wrap; gap: 4px 16px; padding-left: 48px; font-size: 13px; }
+.rowActions button { font-size: 13px; min-height: 28px; }
+.spinning svg { animation: turn 0.8s linear infinite; }
+@keyframes turn { to { transform: rotate(360deg); } }
+.check { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.addRow { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Brand colour swatches */
+.swatch { width: 32px; height: 32px; padding: 0; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 1px var(--border-input); transition: transform 0.2s var(--ease-spring), box-shadow 0.2s var(--ease-out); }
+.swatch:hover { transform: scale(1.12); }
+.swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink); animation: swatch-pick 0.45s var(--ease-spring); }
+@keyframes swatch-pick { 0% { transform: scale(0.8); } 55% { transform: scale(1.22); } 100% { transform: scale(1); } }
+
+/* Pay page preview */
+.preview { border: 1px solid var(--border); border-radius: 14px; background: var(--canvas); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.previewCard { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.previewBar { height: 4px; transition: background-color 0.45s var(--ease-out); }
+.previewAvatar { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; transition: background-color 0.45s var(--ease-out), color 0.3s var(--ease-out); }
+.previewPay { height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; transition: background-color 0.45s var(--ease-out), color 0.3s var(--ease-out); }
+.previewName { animation: name-in 0.25s var(--ease-out); }
+@keyframes name-in { from { opacity: 0.4; } to { opacity: 1; } }
+
+/* Network */
+.netOn { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1.5px solid var(--brand); border-radius: 12px; background: var(--brand-tint); }
+.netOff { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px dashed var(--border-input); border-radius: 12px; }
+.netDot { position: relative; width: 10px; height: 10px; border-radius: 50%; background: var(--testnet); flex-shrink: 0; }
+.netDot::before { content: ""; position: absolute; inset: -3px; border-radius: 50%; background: var(--testnet); opacity: 0.25; animation: breathe 2.6s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { transform: scale(1); opacity: 0.3; } 50% { transform: scale(1.7); opacity: 0.08; } }
+
+/* Security: the password form opens in place. */
+.expand { animation: expand-in 0.3s var(--ease-out) both; transform-origin: top; }
+@keyframes expand-in { from { opacity: 0; transform: translateY(-8px) scaleY(0.96); } to { opacity: 1; transform: none; } }
+.subhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.divider { border: none; border-top: 1px solid var(--border-soft); margin: 0; }
+
+/* Close account: the confirm button unlocks as CLOSE is typed. */
+.letters { display: flex; gap: 6px; }
+.letter { width: 30px; height: 34px; border-radius: 8px; border: 1px solid var(--border); background: var(--row); color: var(--slate-soft); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; transition: background-color 0.2s var(--ease-out), color 0.2s var(--ease-out), border-color 0.2s var(--ease-out), transform 0.3s var(--ease-spring); }
+.letterOn { background: var(--bad-bg); border-color: var(--alert-border); color: var(--bad); transform: translateY(-2px) scale(1.06); }
+.closeBtn { background: var(--border); color: var(--ink-3); opacity: 1 !important; transition: background-color 0.3s var(--ease-out), color 0.3s var(--ease-out), transform 0.3s var(--ease-spring), box-shadow 0.3s var(--ease-out); }
+.closeBtnOn { background: var(--error); color: #fff; animation: unlock 0.4s var(--ease-spring); }
+@keyframes unlock { 0% { transform: scale(0.94); } 60% { transform: scale(1.05); } 100% { transform: scale(1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .saveDirty::before, .discard, .walletRow, .walletFresh, .walletLeaving, .copied, .spinning svg, .swatch[aria-pressed="true"],
+  .previewName, .netDot::before, .expand, .closeBtnOn { animation: none !important; }
+  .knob, .switch, .walletIcon, .iconBtn, .swatch, .previewBar, .previewAvatar, .previewPay, .letter, .closeBtn { transition: none !important; }
+  .walletLeaving { display: none; }
+}
