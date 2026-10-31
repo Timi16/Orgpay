@@ -1,0 +1,484 @@
+/* OrgPay design tokens: "Ledger tree". Source of truth: DESIGN.md.
+   Cool paper, navy ink, one cobalt accent; green only ever means a successful payment.
+   Bricolage Grotesque for titles and headline money, mono for every amount in a list, Inter for the rest. */
+:root {
+  /* Surfaces */
+  --paper: #f3f4f0;
+  --sheet: #ffffff;
+  --sunken: #ecede8;
+  --row-hover: #f7f8fc;
+  --rule: #dadcd3;
+  --rule-soft: #e8e9e3;
+  --rule-strong: #8a8e85; /* inputs, chips: 3:1 against sheet and paper */
+  /* Ink */
+  --ink: #14213d;
+  --ink-2: #475069;
+  --ink-3: #5e6577; /* 4.7:1 on paper, 5.2:1 on sheet */
+  /* Brand */
+  --green: #2f4bd8;
+  --green-hover: #2239b0;
+  --green-tint: #e6eafd;
+  --night: #0e1830;
+  --night-2: #17223d;
+  --on-night: #e3e7f1;
+  --on-night-2: #aeb6cc;
+  /* Status: text / background */
+  --paid: #11663f; --paid-bg: #dff1e6; --paid-ink: #0d4f31;
+  --sending: #855409; --sending-bg: #f7ead0; --sending-stripe: #b98a3c;
+  --failed: #a2361f; --failed-bg: #f7e1d9; --failed-ink: #6e2414;
+  --info: #1f5a8a; --info-bg: #dcebf5;
+  --draft: #4a5263; --draft-bg: #e9eae5;
+  --testnet: #c98a1b;
+
+  /* Names older components use, mapped onto the palette above. */
+  --brand: var(--green); --brand-dark: var(--green-hover); --brand-tint: var(--green-tint); --brand-on-dark: #9fb0ff;
+  --teal: var(--green); --teal-hover: var(--green-hover); --teal-deep: var(--green-hover); --teal-tint: var(--green-tint); --teal-bright: var(--green); --teal-on-dark: #9fb0ff;
+  --good: var(--paid); --good-bg: var(--paid-bg);
+  --warn: var(--sending); --warn-bg: var(--sending-bg);
+  --bad: var(--failed); --bad-bg: var(--failed-bg);
+  --slate: var(--ink-2); --slate-strong: #2c3654; --slate-soft: var(--ink-3);
+  --canvas: var(--paper); --surface: var(--sheet); --row: var(--row-hover);
+  --border: var(--rule); --border-soft: var(--rule-soft); --border-input: var(--rule-strong);
+  --attention-bg: #fbf3df; --attention-fg: var(--sending); --attention-border: #e8d3a2;
+  --danger-bg: var(--failed-bg); --danger-fg: var(--failed);
+  --error: var(--failed); --error-border: var(--failed);
+  --alert-bg: var(--failed-bg); --alert-border: #e9c2b6; --alert-fg: var(--failed-ink);
+  --neutral-bg: var(--draft-bg); --muted-bg: var(--sunken);
+
+  --font-sans: var(--font-inter), "Inter", system-ui, sans-serif;
+  --font-serif: var(--font-bricolage), "Bricolage Grotesque", Inter, sans-serif;
+  --font-mono: var(--font-jetbrains), "JetBrains Mono", ui-monospace, monospace;
+  --shadow-sheet: 0 1px 0 var(--rule-soft), 0 18px 40px -28px rgba(20, 33, 61, 0.35);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--green); text-decoration: none; }
+a:hover { color: var(--green-hover); text-decoration: underline; text-underline-offset: 3px; }
+button { font: inherit; cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: 0.6; }
+input, select, textarea { font: inherit; color: var(--ink); }
+::placeholder { color: var(--ink-3); opacity: 1; }
+:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+h1, h2, h3, p { margin: 0; }
+
+.mono { font-family: var(--font-mono); }
+.serif { font-family: var(--font-serif); font-weight: 400; }
+.tnum { font-variant-numeric: tabular-nums; }
+.muted { color: var(--ink-2); }
+.faint { color: var(--ink-3); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Type */
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+.h1 { font-family: var(--font-serif); font-weight: 400; font-size: 44px; line-height: 1.05; letter-spacing: -0.015em; }
+.h1 em { font-style: italic; color: var(--green); }
+.h2 { font-family: var(--font-serif); font-weight: 400; font-size: 28px; line-height: 1.1; }
+.h3 { font-size: 16px; font-weight: 700; }
+.sub { font-size: 15px; color: var(--ink-2); }
+.money { font-family: var(--font-serif); font-weight: 400; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.money .unit, .unit { font-family: var(--font-mono); font-size: 0.34em; color: var(--ink-3); margin-left: 6px; letter-spacing: 0; }
+
+/* Buttons: pills. 44 px tall (48 for the one main action). */
+.btn {
+  height: 44px; padding: 0 20px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border-radius: 999px; border: 1px solid transparent; font-weight: 600; font-size: 14px; text-decoration: none; white-space: nowrap;
+}
+.btn:hover { text-decoration: none; }
+.btn-primary { background: var(--green); color: #fff; border-color: var(--green); }
+.btn-primary:hover { background: var(--green-hover); border-color: var(--green-hover); color: #fff; }
+.btn-dark { background: var(--ink); color: var(--sheet); border-color: var(--ink); }
+.btn-dark:hover { background: #0e1712; color: var(--sheet); }
+.btn-secondary { background: transparent; color: var(--ink); border-color: var(--rule-strong); }
+.btn-secondary:hover { background: var(--sheet); color: var(--ink); }
+.btn-danger { background: transparent; color: var(--failed); border-color: #d9a597; }
+.btn-danger:hover { background: var(--failed-bg); color: var(--failed); }
+.btn-lg { height: 52px; padding: 0 26px; font-size: 15px; }
+.btn-sm { height: 36px; padding: 0 14px; font-size: 13px; }
+.btn-block { width: 100%; }
+.btn-link { border: none; background: transparent; padding: 0; color: var(--green); font-weight: 600; min-height: 24px; }
+.btn-link:hover { color: var(--green-hover); text-decoration: underline; text-underline-offset: 3px; }
+.icon-btn { width: 36px; height: 36px; border-radius: 999px; border: none; background: transparent; color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; }
+.icon-btn:hover { background: var(--sunken); color: var(--ink); }
+
+/* Forms */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.label { font-size: 13px; font-weight: 600; }
+.input, .select, .textarea {
+  width: 100%; height: 44px; border: 1px solid var(--rule-strong); border-radius: 6px; padding: 0 12px;
+  font-size: 15px; background: var(--sheet);
+}
+.input:focus, .select:focus, .textarea:focus { outline: 2px solid var(--green); outline-offset: 0; border-color: var(--green); }
+.textarea { height: auto; padding: 10px 12px; resize: vertical; }
+.input.mono { font-size: 13px; }
+.input.amount { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.input.invalid, .select.invalid, .textarea.invalid { border: 1.5px solid var(--failed); }
+.hint { font-size: 12px; color: var(--ink-3); }
+.field-error { font-size: 13px; color: var(--failed); }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+.check input { width: 18px; height: 18px; accent-color: var(--green); margin-top: 1px; }
+
+/* Callouts: a coloured rule on the left, like a note pinned to the stub. */
+.alert, .notice, .success, .info-note { border-left: 3px solid; border-radius: 0 4px 4px 0; padding: 11px 14px; font-size: 14px; }
+.alert { background: var(--failed-bg); border-color: var(--failed); color: var(--failed-ink); }
+.notice { background: var(--attention-bg); border-color: var(--testnet); color: #6b4708; }
+.success { background: var(--paid-bg); border-color: var(--paid); color: var(--green-hover); }
+.info-note { background: var(--info-bg); border-color: var(--info); color: #1f3354; }
+
+/* Surfaces. A sheet is paper on paper; .stub adds the perforated edges (documents only). */
+.card, .sheet { background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; box-shadow: var(--shadow-sheet); }
+.card-pad, .sheet-pad { padding: 24px 28px; }
+.stub { position: relative; }
+.stub::before, .stub::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 10px; pointer-events: none;
+  background: radial-gradient(circle at 6px 0, var(--paper) 5px, transparent 5.5px) 0 0 / 12px 10px repeat-x;
+}
+.stub::before { top: -1px; }
+.stub::after { bottom: -1px; transform: scaleY(-1); }
+.tear { border-top: 1px dashed var(--rule); }
+.divider { border-top: 1px solid var(--rule-soft); }
+
+/* Totals: the binding amount always sits on a double rule. */
+.total-rule { border-bottom: 4px double var(--ink); padding-bottom: 6px; }
+.ledger { display: grid; grid-template-columns: 1fr auto; gap: 6px 24px; font-size: 14px; }
+.ledger dt { color: var(--ink-2); }
+.ledger dd { margin: 0; text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* Status pills: always an icon and a word. */
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border-radius: 999px; font-size: 13px; font-weight: 600; white-space: nowrap; line-height: 1.4; }
+.pill-good { background: var(--paid-bg); color: var(--green-hover); }
+.pill-warn { background: var(--sending-bg); color: var(--sending); }
+.pill-danger { background: var(--failed-bg); color: var(--failed); }
+.pill-info, .pill-neutral { background: var(--info-bg); color: var(--info); }
+.pill-muted { background: var(--draft-bg); color: var(--draft); }
+.pill-brand { background: var(--green-tint); color: var(--green-hover); }
+.chip-tag { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border: 1px solid var(--rule); border-radius: 999px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.tag-testnet { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid #e8d3a2; background: var(--attention-bg); color: #6b4708; font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.tag-testnet::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--testnet); box-shadow: 0 0 0 3px rgba(201, 138, 27, 0.2); }
+.tag-testnet:hover { text-decoration: none; color: #6b4708; }
+
+/* Per-payment progress: one tick per person. */
+.ticks { display: flex; gap: 3px; height: 8px; }
+.ticks i { flex: 1; min-width: 2px; border-radius: 2px; background: var(--rule-soft); }
+.ticks i.paid { background: var(--paid); }
+.ticks i.failed { background: var(--failed); }
+.ticks i.sending { background: repeating-linear-gradient(-45deg, var(--sending-stripe) 0 4px, #c9a95a 4px 7px); }
+.ticks i.cancelled { background: var(--rule); }
+.ticks.bar i { border-radius: 0; }
+.ticks.bar { gap: 0; border-radius: 3px; overflow: hidden; }
+
+/* Tables */
+.table-wrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th, .table td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--rule-soft); vertical-align: middle; }
+.table th { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); border-bottom-color: var(--rule); white-space: nowrap; }
+.table th:first-child, .table td:first-child { padding-left: 28px; }
+.table th:last-child, .table td:last-child { padding-right: 28px; }
+.table tbody tr:hover { background: var(--row-hover); }
+.table .num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.table .idx { width: 48px; font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); }
+.who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.who b { font-weight: 600; }
+.who span { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); }
+.rowlink { color: var(--ink); font-weight: 600; }
+.rowlink:hover { color: var(--green); }
+.hash { font-family: var(--font-mono); font-size: 12px; color: var(--green-hover); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; display: inline-flex; align-items: center; min-height: 24px; gap: 4px; }
+.why { display: block; font-size: 12px; color: var(--failed); margin-top: 4px; }
+@media (max-width: 640px) {
+  /* Stacked rows: name and amount on top, wallet and status below. Nothing essential hides. */
+  .table.stack thead { display: none; }
+  .table.stack, .table.stack tbody { display: block; }
+  .table.stack tr { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; padding: 14px 18px; border-bottom: 1px solid var(--rule-soft); }
+  .table.stack td { display: block; padding: 0 !important; border: none; }
+  .table.stack td.hide-sm { display: none; }
+  .table.stack td.full { grid-column: 1 / -1; }
+}
+
+/* Segmented control (joined) */
+.seg { display: inline-flex; border: 1px solid var(--rule-strong); border-radius: 999px; overflow: hidden; background: var(--sheet); max-width: 100%; overflow-x: auto; }
+.seg button { height: 40px; padding: 0 16px; border: none; border-right: 1px solid var(--rule); background: transparent; color: var(--ink-2); font-weight: 600; font-size: 13px; white-space: nowrap; }
+.seg button:last-child { border-right: none; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--sheet); }
+.seg button .count { font-family: var(--font-mono); font-size: 11px; margin-left: 6px; opacity: 0.75; }
+
+/* App shell: a quiet sidebar on paper, the testnet badge always in view. */
+.shell { width: 100%; min-height: 100vh; display: grid; grid-template-columns: 240px minmax(0, 1fr); }
+.shell-nav { padding: 24px 16px; border-right: 1px solid var(--rule); display: flex; flex-direction: column; gap: 2px; position: sticky; top: 0; height: 100vh; }
+.shell-body { min-width: 0; display: flex; flex-direction: column; }
+.shell-top { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 18px 44px 0; }
+.shell-main { min-width: 0; padding: 18px 44px 72px; display: flex; flex-direction: column; gap: 32px; max-width: 1220px; width: 100%; }
+.nav-link { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border-radius: 8px; color: var(--ink-2); font-weight: 500; text-decoration: none; }
+.nav-link:hover { background: var(--sunken); color: var(--ink); text-decoration: none; }
+.nav-link[aria-current="page"] { background: var(--sheet); color: var(--ink); font-weight: 700; box-shadow: inset 0 0 0 1px var(--rule); }
+.nav-link .count { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+.nav-badge { margin-left: auto; background: var(--failed-bg); color: var(--failed); padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.page-head { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px 24px; }
+.page-head > div:first-child { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+@media (max-width: 860px) {
+  .shell { grid-template-columns: 1fr; }
+  .shell-nav { position: static; height: auto; flex-direction: row; align-items: center; gap: 4px; padding: 10px 12px; border-right: none; border-bottom: 1px solid var(--rule); overflow-x: auto; }
+  .shell-nav .nav-company, .shell-nav .nav-foot { display: none !important; }
+  .shell-nav > a:first-child { padding: 0 6px 0 0 !important; }
+  .shell-nav > a:first-child > span { display: none; }
+  .shell-nav .nav-link { min-height: 40px; padding: 0 10px; white-space: nowrap; }
+  .shell-nav .nav-link .count { display: none; }
+  .shell-top { padding: 12px 16px 0; justify-content: space-between; }
+  .shell-main { padding: 12px 16px 56px; gap: 24px; }
+  .h1 { font-size: 34px; }
+  .card-pad, .sheet-pad { padding: 20px; }
+  .table th:first-child, .table td:first-child { padding-left: 18px; }
+  .table th:last-child, .table td:last-child { padding-right: 18px; }
+}
+
+/* Auth: a dark green ledger panel beside the paper form. */
+.auth { width: 100%; min-height: 100vh; display: flex; flex-wrap: wrap; background: var(--paper); }
+.auth-hero { flex: 1 1 460px; padding: 48px 64px; color: var(--on-night); background: var(--night); display: flex; flex-direction: column; justify-content: space-between; gap: 36px; position: relative; overflow: hidden; }
+.auth-hero h1, .auth-hero h2 { font-family: var(--font-serif); font-weight: 400; font-size: 46px; line-height: 1.05; letter-spacing: -0.015em; max-width: 480px; }
+.auth-panel { flex: 1 1 460px; padding: 48px 32px; display: flex; align-items: center; justify-content: center; }
+.auth-card { width: 100%; max-width: 420px; background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; box-shadow: var(--shadow-sheet); padding: 32px; display: flex; flex-direction: column; gap: 16px; }
+.auth-card h2, .auth-card h1 { font-family: var(--font-serif); font-weight: 400; font-size: 32px; line-height: 1.1; }
+@media (max-width: 860px) {
+  .auth-hero { padding: 28px 20px; gap: 20px; }
+  .auth-hero h1, .auth-hero h2 { font-size: 32px; }
+  .auth-panel { padding: 24px 16px; }
+  .auth-card { padding: 24px 20px; }
+}
+
+dialog { margin: auto; padding: 0; border: 1px solid var(--rule); border-radius: 4px; background: var(--sheet); color: var(--ink); box-shadow: 0 30px 80px -30px rgba(20, 32, 26, 0.5); max-width: calc(100vw - 32px); }
+dialog::backdrop { background: rgba(20, 32, 26, 0.5); }
+
+.skeleton { background: linear-gradient(90deg, var(--rule-soft), var(--sheet), var(--rule-soft)); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 4px; color: transparent; }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.empty { padding: 48px 20px; text-align: center; color: var(--ink-2); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.empty strong { color: var(--ink); font-family: var(--font-serif); font-weight: 400; font-size: 24px; }
+
+/* Date tile, for scheduled runs: a calendar tear-off. */
+.date-tile { width: 60px; flex-shrink: 0; text-align: center; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; background: var(--sheet); }
+.date-tile b { display: block; background: var(--green); color: #fff; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; line-height: 20px; }
+.date-tile span { display: block; font-family: var(--font-serif); font-size: 28px; line-height: 38px; }
+
+/* ───────── Motion: calm and quick. Everything here is off under reduced motion. ───────── */
+:root { --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1); --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); --t-fast: 0.12s; --t-base: 0.2s; --t-slow: 0.45s; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes pop { from { opacity: 0; transform: translateY(6px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slide-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+@keyframes slide-in-right { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes scale-in { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
+@keyframes bar-rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes tick-in { from { transform: scaleY(0.2); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes stamp { 0% { transform: scale(1.35) rotate(-4deg); opacity: 0; } 60% { transform: scale(0.96) rotate(-4deg); opacity: 1; } 100% { transform: rotate(-4deg); } }
+@keyframes flash { from { background-color: var(--green-tint); } to { background-color: transparent; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+@keyframes logo-draw { from { stroke-dashoffset: var(--len); } to { stroke-dashoffset: 0; } }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes float-y { from { transform: translateY(0); } to { transform: translateY(-8px); } }
+
+a, .btn, .btn-link, .nav-link, .input, .select, .textarea, .seg button, .table tbody tr {
+  transition: background-color var(--t-base) var(--ease-out), border-color var(--t-base) var(--ease-out), color var(--t-fast) var(--ease-out), box-shadow var(--t-base) var(--ease-out), transform var(--t-fast) var(--ease-out);
+}
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.shell-main > * { animation: rise var(--t-slow) var(--ease-out) backwards; }
+.shell-main > *:nth-child(2) { animation-delay: 0.05s; }
+.shell-main > *:nth-child(3) { animation-delay: 0.1s; }
+.shell-main > *:nth-child(n + 4) { animation-delay: 0.15s; }
+.auth-card { animation: pop var(--t-slow) var(--ease-out) both; }
+.auth-hero > * { animation: rise 0.6s var(--ease-out) both; }
+.auth-hero > *:nth-child(2) { animation-delay: 0.08s; }
+.auth-hero > *:nth-child(n + 3) { animation-delay: 0.16s; }
+dialog[open] { animation: pop 0.2s var(--ease-out); }
+dialog[open]::backdrop { animation: fade 0.2s ease-out; }
+.toast { animation: slide-in-right 0.3s var(--ease-spring); }
+.alert, .notice, .success, .info-note, .field-error { animation: rise 0.25s var(--ease-out); }
+.ticks i { transform-origin: bottom; animation: tick-in 0.4s var(--ease-out) backwards; transition: background-color 0.4s var(--ease-out); }
+.is-fresh { animation: flash 1.6s ease-out; }
+.stamp { display: inline-block; animation: stamp 0.5s var(--ease-out) both; }
+.bar { transform-origin: bottom; animation: bar-rise 0.7s var(--ease-spring) both; animation-delay: calc(var(--i, 0) * 60ms); }
+.stagger > * { animation: slide-up 0.5s var(--ease-out) backwards; }
+.stagger > *:nth-child(2) { animation-delay: 0.06s; } .stagger > *:nth-child(3) { animation-delay: 0.12s; }
+.stagger > *:nth-child(4) { animation-delay: 0.18s; } .stagger > *:nth-child(n + 5) { animation-delay: 0.24s; }
+.anim-pop { animation: pop 0.3s var(--ease-spring) both; }
+.anim-scale-in { animation: scale-in 0.35s var(--ease-spring) both; }
+.anim-slide-up { animation: slide-up 0.5s var(--ease-out) both; }
+.anim-float { animation: float-y 5s ease-in-out infinite alternate; }
+.anim-pulse { animation: pulse 1.4s ease-in-out infinite; }
+.dialog-x { position: absolute; right: 12px; top: 12px; width: 40px; height: 40px; border: none; background: transparent; border-radius: 999px; color: var(--ink-2); display: flex; align-items: center; justify-content: center; }
+.dialog-x:hover { background: var(--sunken); }
+
+/* ───────── Motion layer: alive, but always in service of the money story ───────── */
+@keyframes ripple { from { transform: scale(0.7); opacity: 0.9; } to { transform: scale(1.9); opacity: 0; } }
+@keyframes slide-in-left { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: none; } }
+@keyframes stripes { from { background-position: 0 0; } to { background-position: 22px 0; } }
+@keyframes shine { from { transform: translateX(-130%) skewX(-20deg); } to { transform: translateX(330%) skewX(-20deg); } }
+@keyframes word-up { from { opacity: 0; transform: translateY(0.45em); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes underline-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes paper-in { from { opacity: 0; transform: translateY(26px) rotate(-1.2deg); } to { opacity: 1; transform: none; } }
+@keyframes seal { 0% { opacity: 0; transform: scale(2.2) rotate(-14deg); } 55% { opacity: 1; transform: scale(0.92) rotate(-9deg); } 75% { transform: scale(1.04) rotate(-9deg); } 100% { opacity: 1; transform: rotate(-9deg); } }
+@keyframes ink-bleed { from { box-shadow: 0 0 0 0 currentColor; } to { box-shadow: 0 0 0 10px transparent; } }
+@keyframes row-paid { 0% { background-color: var(--green-tint); } 100% { background-color: transparent; } }
+@keyframes row-failed { 0% { background-color: var(--failed-bg); } 100% { background-color: transparent; } }
+@keyframes breathe { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.25); opacity: 0.6; } }
+@keyframes nav-in { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes count-glow { from { color: var(--green); } to { color: inherit; } }
+
+/* Buttons: lift on hover, press down, the main action catches the light once. */
+.btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 16px -8px rgba(27, 38, 32, 0.45); }
+.btn:active:not(:disabled) { transform: translateY(0) scale(0.98); box-shadow: none; }
+.btn-primary { position: relative; overflow: hidden; }
+.btn-primary::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 40%; pointer-events: none; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent); transform: translateX(-130%) skewX(-20deg); }
+.btn-primary:hover:not(:disabled)::after { animation: shine 0.9s ease-out; }
+.btn svg { transition: transform var(--t-base) var(--ease-spring); }
+.btn:hover:not(:disabled) svg { transform: translateX(2px) scale(1.06); }
+.icon-btn { transition: background-color var(--t-fast), transform var(--t-base) var(--ease-spring), color var(--t-fast); }
+.icon-btn:hover { transform: rotate(-6deg) scale(1.06); }
+
+/* Nav: the current item gets a green rule that grows in; icons nudge on hover. */
+.nav-link { position: relative; }
+@media (min-width: 861px) { .nav-link[aria-current="page"]::before { content: ""; position: absolute; left: -16px; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--green); transform-origin: center; animation: nav-in 0.35s var(--ease-spring) backwards; } }
+.nav-link svg { transition: transform var(--t-base) var(--ease-spring); }
+.nav-link:hover svg { transform: translateX(2px) scale(1.08); }
+.tag-testnet::before { animation: breathe 2.6s ease-in-out 3; }
+
+/* Sheets arrive like paper being laid down; linkable cards lift. */
+.shell-main > .sheet, .shell-main > section.sheet, .shell-main > article.sheet { animation: paper-in 0.6s var(--ease-out) backwards; }
+.shell-main > *:nth-child(2) { animation-delay: 0.06s; }
+.shell-main > *:nth-child(3) { animation-delay: 0.12s; }
+.shell-main > *:nth-child(4) { animation-delay: 0.18s; }
+.shell-main > *:nth-child(n + 5) { animation-delay: 0.24s; }
+.lift { transition: transform var(--t-base) var(--ease-out), box-shadow var(--t-base) var(--ease-out); }
+.lift:hover { transform: translateY(-3px); box-shadow: 0 1px 0 var(--rule-soft), 0 26px 50px -30px rgba(27, 38, 32, 0.45); }
+
+/* Tables: rows deal in one after another (on the cells, filling backwards only, so a later class
+   change or hover never replays it); a row that just changed glows once. */
+.table tbody td { animation: slide-in-left 0.42s var(--ease-out) backwards; }
+.table tbody tr:nth-child(1) td { animation-delay: 0.04s; } .table tbody tr:nth-child(2) td { animation-delay: 0.08s; }
+.table tbody tr:nth-child(3) td { animation-delay: 0.12s; } .table tbody tr:nth-child(4) td { animation-delay: 0.16s; }
+.table tbody tr:nth-child(5) td { animation-delay: 0.2s; } .table tbody tr:nth-child(6) td { animation-delay: 0.24s; }
+.table tbody tr:nth-child(7) td { animation-delay: 0.28s; } .table tbody tr:nth-child(8) td { animation-delay: 0.32s; }
+.table tbody tr:nth-child(n + 9) td { animation-delay: 0.36s; }
+.table tbody tr.just-paid, .table tbody tr.just-paid:hover { animation: row-paid 2.2s ease-out; }
+.table tbody tr.just-failed, .table tbody tr.just-failed:hover { animation: row-failed 2.2s ease-out; }
+.table tbody tr .rowlink { background-image: linear-gradient(currentColor, currentColor); background-size: 0 1px; background-repeat: no-repeat; background-position: 0 100%; transition: background-size 0.3s var(--ease-out), color var(--t-fast); }
+.table tbody tr:hover .rowlink { background-size: 100% 1px; text-decoration: none; }
+
+/* Pills pop in when their status changes (they are keyed by status). */
+.pill { animation: pop 0.35s var(--ease-spring) both; }
+
+/* Money in flight: the striped ticks travel; paid ticks settle in green one by one. */
+.ticks i.sending { background-size: 22px 100%; background-image: repeating-linear-gradient(-45deg, var(--sending-stripe) 0 5px, #c9a95a 5px 11px); animation: tick-in 0.4s var(--ease-out) backwards, stripes 0.8s linear infinite; }
+.ticks i { transition: background-color 0.5s var(--ease-out), transform 0.3s var(--ease-spring); }
+.ticks:hover i { transform: scaleY(1.35); }
+
+/* Totals land on their double rule: the rule draws in under the figure. */
+.total-rule { position: relative; border-bottom: none; padding-bottom: 10px; }
+.total-rule::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); transform-origin: left; animation: underline-draw 0.8s var(--ease-out) 0.25s both; }
+
+/* The rubber stamp on a finished run: in the header's status column, so it never covers the title.
+   Visible by default; the animation only plays it in. */
+.seal { display: inline-block; margin: 14px 8px 0 0; pointer-events: none; font-family: var(--font-serif); font-size: 28px; line-height: 1; letter-spacing: 0.08em; text-transform: uppercase; padding: 10px 18px 8px; border: 3px double currentColor; border-radius: 6px; transform: rotate(-9deg); animation: seal 0.7s var(--ease-out) 0.35s backwards; mix-blend-mode: multiply; white-space: nowrap; }
+.seal small { display: block; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; margin-top: 4px; text-align: center; }
+.seal-paid { color: var(--green); }
+.seal-partial { color: var(--failed); }
+@media (max-width: 640px) { .seal { font-size: 20px; padding: 7px 12px 6px; margin: 4px 0 0 4px; } }
+
+/* Headlines: words rise in, one after another (wrap words in .word). */
+.word { display: inline-block; animation: word-up 0.7s var(--ease-out) both; animation-delay: calc(var(--w, 0) * 70ms + 80ms); }
+
+/* Dialogs rise from below; their backdrop blurs the page a touch. */
+dialog[open] { animation: slide-up 0.32s var(--ease-spring); }
+dialog::backdrop { backdrop-filter: blur(2px); }
+
+/* Inputs: focus draws the eye with a soft ring. */
+.input, .select, .textarea { transition: border-color var(--t-base), box-shadow var(--t-base); }
+.input:focus, .select:focus, .textarea:focus { box-shadow: 0 0 0 4px rgba(15, 107, 75, 0.12); }
+
+/* Recently updated numbers glow green once. */
+.count-glow { animation: count-glow 1.4s ease-out both; }
+
+/* A button that is working shows a spinner (set aria-busy on it). */
+.btn[aria-busy="true"] { cursor: progress; }
+.btn[aria-busy="true"]:not(.btn-secondary):not(.btn-link)::before {
+  content: ""; width: 16px; height: 16px; flex-shrink: 0; border-radius: 50%; border: 2.5px solid currentColor; border-right-color: transparent; animation: spin 0.7s linear infinite;
+}
+.btn[aria-busy="true"]:disabled { opacity: 0.85; }
+.spinner { width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid currentColor; border-right-color: transparent; animation: spin 0.8s linear infinite; display: inline-block; flex-shrink: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .btn[aria-busy="true"]:not(.btn-secondary):not(.btn-link)::before, .spinner { animation: spin 1.4s linear infinite !important; }
+}
+.nav-mobile-only { display: none; }
+@media (max-width: 860px) { .nav-mobile-only { display: inline-flex; } }
+
+/* Run document: facts strip and totals. */
+.facts { display: grid; grid-template-columns: repeat(4, auto); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 4px; width: fit-content; max-width: 100%; margin: 0; }
+.facts > div { background: var(--sheet); padding: 8px 14px; min-width: 0; }
+.facts dt { font-size: 12px; color: var(--ink-3); }
+.facts dd { margin: 2px 0 0; font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.run-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; padding: 30px 28px 22px; }
+.run-head-status { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.run-totals { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; padding: 22px 28px 30px; border-top: 1px solid var(--rule); align-items: end; }
+@media (max-width: 640px) {
+  .facts { grid-template-columns: 1fr 1fr; width: 100%; }
+  .run-head { grid-template-columns: 1fr; padding: 26px 18px 18px; gap: 12px; }
+  .run-head-status { order: -1; align-items: flex-start; }
+  .run-totals { grid-template-columns: 1fr; padding: 20px 18px 26px; }
+  .run-totals .money { text-align: left !important; justify-self: start; }
+}
+
+/* KPI strip: cells divided on wide screens, stacked without stray rules on narrow ones. */
+.kpi-cell { border-right: 1px solid var(--rule-soft); }
+.kpi-cell:last-child { border-right: none; }
+@media (max-width: 760px) { .kpi-cell { border-right: none; border-bottom: 1px solid var(--rule-soft); } .kpi-cell:last-child { border-bottom: none; } }
+
+/* ---------- OrgPay layer ---------- */
+/* Display type is Bricolage Grotesque, bold and tight where PayBridge's serif was light. */
+.serif, .h1, .h2, .money, .auth-hero h1, .auth-hero h2, .auth-card h1, .auth-card h2, .empty strong, .date-tile span, .seal { font-weight: 700; letter-spacing: -0.02em; }
+.h1 em { font-style: normal; color: var(--green); }
+.success { color: var(--paid-ink); background: var(--paid-bg); border-color: var(--paid); }
+.seal-paid { color: var(--paid); }
+.seal-partial { color: var(--sending); }
+.pill-good { color: var(--paid); background: var(--paid-bg); }
+
+/* Ticks: waiting for a signature (amber stripes) and confirming on Stellar (blue stripes). */
+.ticks i.signing { background-size: 22px 100%; background-image: repeating-linear-gradient(-45deg, var(--sending-stripe) 0 5px, #e9c77f 5px 11px); }
+.ticks i.sending { background-image: repeating-linear-gradient(-45deg, #1f5a8a 0 5px, #8db5d6 5px 11px); }
+
+/* The fan-out mark: the lines carry payments, the dots land them. */
+.lg-flow { stroke-dasharray: 3 2.2; }
+@media (prefers-reduced-motion: no-preference) {
+  .lg-live .lg-flow { animation: lgflow 1.4s linear infinite; }
+  .lg-live .lg-leaf { transform-box: fill-box; transform-origin: center; animation: lgleaf 2.4s ease-in-out infinite; }
+  .lg-live .lg-l2 { animation-delay: 0.25s; }
+  .lg-live .lg-l3 { animation-delay: 0.5s; }
+  .ticks i.signing { animation: tick-in 0.4s var(--ease-out) backwards, stripes 0.8s linear infinite; }
+  .verify-list li { animation: verify-in 0.4s var(--ease-out) both; }
+  .live-dot { animation: live 1.6s ease-out infinite; }
+}
+@keyframes lgflow { to { stroke-dashoffset: -10.4; } }
+@keyframes lgleaf { 0%, 55%, 100% { transform: scale(1); } 25% { transform: scale(1.3); } }
+@keyframes verify-in { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+@keyframes live { 0% { box-shadow: 0 0 0 0 rgba(17, 102, 63, 0.55); } 100% { box-shadow: 0 0 0 10px rgba(17, 102, 63, 0); } }
+
+/* Verified payments and the Verify dialog. */
+.verified-mark { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--paid); }
+.verify-list { list-style: none; margin: 0; padding: 0; }
+.verify-list li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--rule-soft); font-size: 14px; }
+.verify-mark { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.verify-mark.ok { background: var(--paid-bg); color: var(--paid); }
+.verify-mark.no { background: var(--failed-bg); color: var(--failed); }
+.live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--paid); }
+
+/* Option cards (how payments are sent). */
+.choice { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--rule-strong); border-radius: 6px; cursor: pointer; background: var(--sheet); transition: border-color 0.2s, background 0.2s; }
+.choice input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--green); flex: none; }
+.choice-on { border: 2px solid var(--green); background: #f5f7ff; padding: 11px 13px; }
