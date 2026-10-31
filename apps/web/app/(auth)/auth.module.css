@@ -1,0 +1,135 @@
+/* Auth screens: an ink panel on the left, the form straight on the canvas on the right. */
+.split { width: 100%; min-height: 100vh; min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+
+.hero {
+  position: relative; overflow: hidden; isolation: isolate; padding: 48px 72px; background: var(--ink); color: #fff;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 36px;
+}
+.heroBody { display: flex; flex-direction: column; gap: 18px; max-width: 460px; }
+.heroTitle { font-size: 38px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+.heroText { font-size: 16px; color: var(--on-night-2); line-height: 1.6; }
+.heroList { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 14px; color: var(--on-night); }
+.heroList li { display: flex; gap: 10px; align-items: center; }
+.heroList svg { color: var(--brand-on-dark); flex-shrink: 0; }
+.heroFoot { font-size: 13px; color: var(--slate-soft); }
+
+.panel { display: flex; align-items: center; justify-content: center; padding: 48px; min-width: 0; }
+.column { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 18px; }
+.head { display: flex; flex-direction: column; gap: 6px; }
+.title { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+.form { display: flex; flex-direction: column; gap: 14px; }
+.labelRow { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--slate); line-height: 1.5; }
+.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--brand); flex-shrink: 0; }
+.foot { font-size: 14px; color: var(--slate); text-align: center; }
+
+/* ───────── Centred screens: verify email, forgot and reset password ───────── */
+.centre { position: relative; overflow: hidden; isolation: isolate; width: 100%; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; padding: 48px 24px; gap: 32px; }
+.card { width: 100%; max-width: 440px; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 32px; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06); }
+.cardBody { display: flex; flex-direction: column; gap: 18px; }
+.cardTitle { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+.cardText { font-size: 15px; color: var(--slate); line-height: 1.55; }
+.badge { position: relative; width: 52px; height: 52px; border-radius: 50%; background: var(--brand-tint); color: var(--brand); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.badge::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--brand); opacity: 0; animation: au-ring 2.8s ease-out 0.6s infinite; pointer-events: none; }
+.backdrop { position: absolute; left: 50%; bottom: -6%; width: min(1100px, 150vw); transform: translateX(-50%); z-index: -1; pointer-events: none; color: var(--brand); opacity: 0.1; }
+.linkRow { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 14px; }
+.quiet { border: none; background: transparent; padding: 0; color: var(--slate); font-weight: 600; }
+.quiet:hover { color: var(--ink); text-decoration: underline; }
+.done { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; padding: 12px 0; }
+
+/* Six-digit code: one real input laid over six boxes, so paste and one-time-code autofill keep working. */
+.code { position: relative; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.codeInput { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: none; padding: 0; font-size: 16px; cursor: text; }
+.codeInput:disabled { cursor: progress; }
+.box {
+  position: relative; height: 58px; border-radius: 12px; border: 1.5px solid var(--border-input); background: var(--surface);
+  display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 26px; font-weight: 600;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.18s ease;
+}
+.boxFilled { border-color: var(--brand); background: var(--brand-tint); }
+.boxBad { border-color: var(--error-border); }
+.code:focus-within .boxActive { border-color: var(--brand); box-shadow: 0 0 0 4px rgba(15, 107, 75, 0.14); transform: translateY(-2px); }
+.code:focus-within .boxActive::after { content: ""; width: 2px; height: 24px; border-radius: 2px; background: var(--brand); animation: au-caret 1s steps(2, jump-none) infinite; }
+.digit { display: inline-block; animation: au-digit 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.codeBusy .box { animation: au-wave 0.9s ease-in-out infinite; animation-delay: calc(var(--i, 0) * 80ms); }
+
+/* ───────── Motion ───────── */
+@keyframes au-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@keyframes au-from-right { from { opacity: 0; transform: translateX(22px); } to { opacity: 1; transform: none; } }
+@keyframes au-pop { from { opacity: 0; transform: translateY(10px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes au-draw { to { stroke-dashoffset: 0; } }
+@keyframes au-redraw { 0% { stroke-dashoffset: 1; } 45%, 80% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -1; } }
+@keyframes au-drift-a { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(-70px, 60px, 0) scale(1.15); } }
+@keyframes au-drift-b { from { transform: translate3d(0, 0, 0) scale(1.1); } to { transform: translate3d(80px, -50px, 0) scale(0.95); } }
+@keyframes au-travel { from { offset-distance: 0%; opacity: 0; } 12%, 88% { opacity: 1; } to { offset-distance: 100%; opacity: 0; } }
+@keyframes au-shake-a { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(2px); } }
+@keyframes au-shake-b { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(2px); } }
+@keyframes au-ring { 0% { transform: scale(1); opacity: 0.5; } 60%, 100% { transform: scale(1.7); opacity: 0; } }
+@keyframes au-caret { from { opacity: 1; } to { opacity: 0; } }
+@keyframes au-digit { from { opacity: 0; transform: translateY(10px) scale(0.4); } to { opacity: 1; transform: none; } }
+@keyframes au-wave { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+
+/* Left panel: each piece rises in turn (set --i). */
+.in { position: relative; z-index: 1; animation: au-rise 0.65s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(var(--i, 0) * 80ms + 60ms); }
+.tick { stroke-dasharray: 24; stroke-dashoffset: 24; animation: au-draw 0.4s ease-out forwards; animation-delay: calc(var(--i, 0) * 80ms + 420ms); }
+
+/* The decoration stays on the far side of the panel and stays dim, so white text keeps its contrast. */
+.decor { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.blob { position: absolute; border-radius: 50%; filter: blur(70px); will-change: transform; }
+.blobA { width: 420px; height: 420px; right: -160px; top: -140px; background: rgba(15, 107, 75, 0.45); animation: au-drift-a 19s ease-in-out infinite alternate; }
+.blobB { width: 360px; height: 360px; right: -60px; bottom: -180px; background: rgba(201, 138, 27, 0.14); animation: au-drift-b 23s ease-in-out infinite alternate; }
+.arch { position: absolute; right: -14%; bottom: 8%; width: 78%; max-width: 560px; color: var(--brand-on-dark); opacity: 0.16; }
+.archLine { stroke-dasharray: 1; stroke-dashoffset: 1; animation: au-redraw 14s ease-in-out infinite; }
+.archDot { offset-path: path("M20 150C120 20 380 20 480 150"); animation: au-travel 7s ease-in-out 1.5s infinite; opacity: 0; }
+
+/* Right column: heading, fields and footer arrive one after another. */
+.column > *, .form > * { animation: au-from-right 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.column > *:nth-child(1) { animation-delay: 0.05s; }
+.column > .form { animation: none; }
+.form > *:nth-child(1) { animation-delay: 0.12s; }
+.form > *:nth-child(2) { animation-delay: 0.18s; }
+.form > *:nth-child(3) { animation-delay: 0.24s; }
+.form > *:nth-child(4) { animation-delay: 0.3s; }
+.form > *:nth-child(5) { animation-delay: 0.36s; }
+.form > *:nth-child(n + 6) { animation-delay: 0.42s; }
+.column > .foot { animation-delay: 0.5s; }
+
+/* A control that failed shakes once per attempt (the two names alternate so it can replay). */
+.shakeA { animation: au-shake-a 0.4s ease-in-out both; }
+.shakeB { animation: au-shake-b 0.4s ease-in-out both; }
+
+/* Centred screens. */
+.centre > * { animation: au-rise 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.centre > .card { animation: au-pop 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.08s both; }
+.centre > .after { animation-delay: 0.3s; font-size: 14px; font-weight: 700; }
+.centre > .backdrop { animation: none; }
+.backdropLine { stroke-dasharray: 1; stroke-dashoffset: 1; animation: au-draw 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) 0.3s forwards; }
+.cardBody > * { animation: au-rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.cardBody > *:nth-child(1) { animation-delay: 0.16s; }
+.cardBody > *:nth-child(2) { animation-delay: 0.22s; }
+.cardBody > *:nth-child(3) { animation-delay: 0.28s; }
+.cardBody > *:nth-child(4) { animation-delay: 0.34s; }
+.cardBody > *:nth-child(n + 5) { animation-delay: 0.4s; }
+
+@media (max-width: 900px) {
+  .split { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+  .hero { padding: 24px 20px; gap: 18px; }
+  .heroTitle { font-size: 26px; }
+  .heroText, .heroList, .heroFoot { display: none; }
+  .arch { width: 60%; bottom: -30%; }
+  .panel { padding: 28px 16px 40px; align-items: flex-start; }
+}
+@media (max-width: 480px) {
+  .centre { padding: 28px 16px; gap: 22px; }
+  .card { padding: 22px 18px; }
+  .code { gap: 6px; }
+  .box { height: 52px; font-size: 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .in, .tick, .blob, .archLine, .archDot, .column > *, .form > *, .shakeA, .shakeB, .centre > *, .cardBody > *, .backdropLine, .badge::after, .digit, .box, .codeBusy .box, .code:focus-within .boxActive::after {
+    animation: none !important; transition: none !important;
+  }
+  .tick, .archLine, .backdropLine { stroke-dashoffset: 0; }
+  .archDot { display: none; }
+}
