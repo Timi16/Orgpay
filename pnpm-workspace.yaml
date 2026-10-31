@@ -12,3 +12,8 @@ allowBuilds:
   protobufjs: false
 overrides:
   deepmerge-ts: "^8.0.0"
+  # Security fixes for transitive dependencies (pnpm audit, 31 Oct 2026).
+  body-parser: ">=2.4.0 <3"
+  qs: ">=6.16.1 <7"
+  ip-address: ">=10.7.4 <11"
+  follow-redirects: ">=1.16.2 <2"
