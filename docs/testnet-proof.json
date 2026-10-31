@@ -1,0 +1,356 @@
+{
+  "generatedAt": "2026-10-31T18:25:26.847Z",
+  "network": "testnet",
+  "usdcIssuer": "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+  "fundingWallet": "GDTDY4CDVS73QEKS7QLX4V75ARDSUV4HIP7TMNLHHKEONKJCXJROCRAB",
+  "run": {
+    "id": "cmvwqdk6h000gsgga8eudrste",
+    "number": 1,
+    "status": "COMPLETED",
+    "employeeCount": 6,
+    "total": "10.0000001"
+  },
+  "payments": [
+    {
+      "paymentId": "cmvwqdk6q000hsggageu9ftzq",
+      "position": 1,
+      "employeeId": "cmvwqdikd0004sggal1bvkaoe",
+      "name": "Ada Okafor",
+      "wallet": "GBU2AJEFGBPXUDT4D5DJSBKWO7OHPSZLOIX4ZPJ6JCNOW5LRFDTG7QET",
+      "amount": "1.0000000",
+      "status": "SUCCESSFUL",
+      "txHash": "b7f1599bd25b6bdd1b6670901cf23d1079f5370260c84e7f8f966793e9cdda6b",
+      "ledger": 5489490,
+      "memo": "OrgPay R1 P1",
+      "verified": true,
+      "explorerUrl": "https://stellar.expert/explorer/testnet/tx/b7f1599bd25b6bdd1b6670901cf23d1079f5370260c84e7f8f966793e9cdda6b"
+    },
+    {
+      "paymentId": "cmvwqdk6q000isgga93fix664",
+      "position": 2,
+      "employeeId": "cmvwqdjdj000csgga6jwehdid",
+      "name": "Amara Nwosu",
+      "wallet": "GAUFYRHGP7AR2ZTKBDT7XQPZGTGPKFD5EOOSXVMWVWO3B7MUPMT6RRDR",
+      "amount": "2.0000001",
+      "status": "SUCCESSFUL",
+      "txHash": "e53d06a7bd5c30384cf5b1cd57c229adae7e47029ef5b7b69fbd47e0640e1c7c",
+      "ledger": 5489491,
+      "memo": "OrgPay R1 P2",
+      "verified": true,
+      "explorerUrl": "https://stellar.expert/explorer/testnet/tx/e53d06a7bd5c30384cf5b1cd57c229adae7e47029ef5b7b69fbd47e0640e1c7c"
+    },
+    {
+      "paymentId": "cmvwqdk6q000jsggat1f0cp8j",
+      "position": 3,
+      "employeeId": "cmvwqdiro0006sgga6h7rj7bw",
+      "name": "Kenji Watanabe",
+      "wallet": "GDTDWX75OOC76JJSI36YDIMKRWGZAFSBMIICFKBG6BQJION6ETOZOMD3",
+      "amount": "1.2500000",
+      "status": "SUCCESSFUL",
+      "txHash": "6efb22841ecc08145b107fa45ed63615daaf47bcf98bf8a68048486355477d94",
+      "ledger": 5489492,
+      "memo": "OrgPay R1 P3",
+      "verified": true,
+      "explorerUrl": "https://stellar.expert/explorer/testnet/tx/6efb22841ecc08145b107fa45ed63615daaf47bcf98bf8a68048486355477d94"
+    },
+    {
+      "paymentId": "cmvwqdk6q000ksggalk0g9rqb",
+      "position": 4,
+      "employeeId": "cmvwqdj6b000asggacsq8i4b9",
+      "name": "Marcus Silva",
+      "wallet": "GCWYNPMGKQYYXSUFHU5OX4M7ZKEUAFBXBCR6DPJ4UTGPUBOVFUVKUQ4V",
+      "amount": "1.7500000",
+      "status": "SUCCESSFUL",
+      "txHash": "3c5eb203467f08b63dd802461aaddc22741875a0f8270837d787fb8fb39d5027",
+      "ledger": 5489493,
+      "memo": "OrgPay R1 P4",
+      "verified": true,
+      "explorerUrl": "https://stellar.expert/explorer/testnet/tx/3c5eb203467f08b63dd802461aaddc22741875a0f8270837d787fb8fb39d5027"
+    },
+    {
+      "paymentId": "cmvwqdk6q000lsgga910leax9",
+      "position": 5,
+      "employeeId": "cmvwqdiz10008sgga9x6zip5j",
+      "name": "Priya Raman",
+      "wallet": "GBCW6CB3OLPXDARI2ZYFPRCLPN7GB2336YZQZAEOQEX5RJSEPM3R6JT7",
+      "amount": "1.5000000",
+      "status": "SUCCESSFUL",
+      "txHash": "1d8d0df3d581b63b36439190090a226f3632545e7232d70e6354b82e65df60b3",
+      "ledger": 5489494,
+      "memo": "OrgPay R1 P5",
+      "verified": true,
+      "explorerUrl": "https://stellar.expert/explorer/testnet/tx/1d8d0df3d581b63b36439190090a226f3632545e7232d70e6354b82e65df60b3"
+    },
+    {
+      "paymentId": "cmvwqdk6q000msggayc28p5kq",
+      "position": 6,
+      "employeeId": "cmvwqdjyq000esggar03pm69t",
+      "name": "Tomás Reyes",
+      "wallet": "GBAQADTV7HBUXISW33SAM5XILGXIRP6DU3T2MTO57NBUSTUZUNMEUFX7",
+      "amount": "2.5000000",
+      "status": "SUCCESSFUL",
+      "txHash": "9ab4ea450f4dd479386c2ecf0fee6e3f35040ba0ac87664107e4298216bc8a83",
+      "ledger": 5489496,
+      "memo": "OrgPay R1 P6",
+      "verified": true,
+      "explorerUrl": "https://stellar.expert/explorer/testnet/tx/9ab4ea450f4dd479386c2ecf0fee6e3f35040ba0ac87664107e4298216bc8a83"
+    }
+  ],
+  "checks": [
+    {
+      "check": "six employees stored with their wallet and USDC salary",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Tomás Reyes is flagged NO_TRUSTLINE before any payroll",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "the same create-run request sent twice made one run",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "the run has six employees, one payment per transaction",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "the total is the exact sum of the salaries",
+      "ok": true,
+      "detail": "10.0000001 USDC"
+    },
+    {
+      "check": "review: five payable, one can't receive, funding is enough",
+      "ok": true,
+      "detail": "7.5000001 USDC payable"
+    },
+    {
+      "check": "Execute pressed again is refused (409)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Tomás Reyes is FAILED (no trustline) and never sent",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "transaction 1 confirmed on the ledger",
+      "ok": true,
+      "detail": "b7f1599bd25b6bdd1b6670901cf23d1079f5370260c84e7f8f966793e9cdda6b → CONFIRMED"
+    },
+    {
+      "check": "transaction 2 confirmed on the ledger",
+      "ok": true,
+      "detail": "e53d06a7bd5c30384cf5b1cd57c229adae7e47029ef5b7b69fbd47e0640e1c7c → CONFIRMED"
+    },
+    {
+      "check": "transaction 3 confirmed on the ledger",
+      "ok": true,
+      "detail": "6efb22841ecc08145b107fa45ed63615daaf47bcf98bf8a68048486355477d94 → CONFIRMED"
+    },
+    {
+      "check": "transaction 4 confirmed on the ledger",
+      "ok": true,
+      "detail": "3c5eb203467f08b63dd802461aaddc22741875a0f8270837d787fb8fb39d5027 → CONFIRMED"
+    },
+    {
+      "check": "transaction 5 confirmed on the ledger",
+      "ok": true,
+      "detail": "1d8d0df3d581b63b36439190090a226f3632545e7232d70e6354b82e65df60b3 → CONFIRMED"
+    },
+    {
+      "check": "five payments SUCCESSFUL, each verified with a hash",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "five separate transactions, five distinct hashes",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "run is PARTIALLY_PAID while one payment failed",
+      "ok": true,
+      "detail": "PARTIALLY_PAID"
+    },
+    {
+      "check": "the same signed transaction submitted again is not sent twice",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "transaction 6 confirmed on the ledger",
+      "ok": true,
+      "detail": "9ab4ea450f4dd479386c2ecf0fee6e3f35040ba0ac87664107e4298216bc8a83 → CONFIRMED"
+    },
+    {
+      "check": "run is COMPLETED after the retry",
+      "ok": true,
+      "detail": "COMPLETED"
+    },
+    {
+      "check": "nothing left to sign on a completed run",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Ada Okafor: Horizon shows a successful transaction from the funding wallet",
+      "ok": true,
+      "detail": "b7f1599bd25b6bdd1b6670901cf23d1079f5370260c84e7f8f966793e9cdda6b"
+    },
+    {
+      "check": "Ada Okafor: one USDC payment of 1.0000000 to their wallet",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Ada Okafor: the memo names run #1, payment 1",
+      "ok": true,
+      "detail": "OrgPay R1 P1"
+    },
+    {
+      "check": "Ada Okafor: on-chain balance equals the salary (paid exactly once)",
+      "ok": true,
+      "detail": "1.0000000 USDC"
+    },
+    {
+      "check": "Ada Okafor: OrgPay's /verify passes every check",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Amara Nwosu: Horizon shows a successful transaction from the funding wallet",
+      "ok": true,
+      "detail": "e53d06a7bd5c30384cf5b1cd57c229adae7e47029ef5b7b69fbd47e0640e1c7c"
+    },
+    {
+      "check": "Amara Nwosu: one USDC payment of 2.0000001 to their wallet",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Amara Nwosu: the memo names run #1, payment 2",
+      "ok": true,
+      "detail": "OrgPay R1 P2"
+    },
+    {
+      "check": "Amara Nwosu: on-chain balance equals the salary (paid exactly once)",
+      "ok": true,
+      "detail": "2.0000001 USDC"
+    },
+    {
+      "check": "Amara Nwosu: OrgPay's /verify passes every check",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Kenji Watanabe: Horizon shows a successful transaction from the funding wallet",
+      "ok": true,
+      "detail": "6efb22841ecc08145b107fa45ed63615daaf47bcf98bf8a68048486355477d94"
+    },
+    {
+      "check": "Kenji Watanabe: one USDC payment of 1.2500000 to their wallet",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Kenji Watanabe: the memo names run #1, payment 3",
+      "ok": true,
+      "detail": "OrgPay R1 P3"
+    },
+    {
+      "check": "Kenji Watanabe: on-chain balance equals the salary (paid exactly once)",
+      "ok": true,
+      "detail": "1.2500000 USDC"
+    },
+    {
+      "check": "Kenji Watanabe: OrgPay's /verify passes every check",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Marcus Silva: Horizon shows a successful transaction from the funding wallet",
+      "ok": true,
+      "detail": "3c5eb203467f08b63dd802461aaddc22741875a0f8270837d787fb8fb39d5027"
+    },
+    {
+      "check": "Marcus Silva: one USDC payment of 1.7500000 to their wallet",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Marcus Silva: the memo names run #1, payment 4",
+      "ok": true,
+      "detail": "OrgPay R1 P4"
+    },
+    {
+      "check": "Marcus Silva: on-chain balance equals the salary (paid exactly once)",
+      "ok": true,
+      "detail": "1.7500000 USDC"
+    },
+    {
+      "check": "Marcus Silva: OrgPay's /verify passes every check",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Priya Raman: Horizon shows a successful transaction from the funding wallet",
+      "ok": true,
+      "detail": "1d8d0df3d581b63b36439190090a226f3632545e7232d70e6354b82e65df60b3"
+    },
+    {
+      "check": "Priya Raman: one USDC payment of 1.5000000 to their wallet",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Priya Raman: the memo names run #1, payment 5",
+      "ok": true,
+      "detail": "OrgPay R1 P5"
+    },
+    {
+      "check": "Priya Raman: on-chain balance equals the salary (paid exactly once)",
+      "ok": true,
+      "detail": "1.5000000 USDC"
+    },
+    {
+      "check": "Priya Raman: OrgPay's /verify passes every check",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Tomás Reyes: Horizon shows a successful transaction from the funding wallet",
+      "ok": true,
+      "detail": "9ab4ea450f4dd479386c2ecf0fee6e3f35040ba0ac87664107e4298216bc8a83"
+    },
+    {
+      "check": "Tomás Reyes: one USDC payment of 2.5000000 to their wallet",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "Tomás Reyes: the memo names run #1, payment 6",
+      "ok": true,
+      "detail": "OrgPay R1 P6"
+    },
+    {
+      "check": "Tomás Reyes: on-chain balance equals the salary (paid exactly once)",
+      "ok": true,
+      "detail": "2.5000000 USDC"
+    },
+    {
+      "check": "Tomás Reyes: OrgPay's /verify passes every check",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "six successful transactions in total, all distinct",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

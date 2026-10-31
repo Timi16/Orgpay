@@ -14,7 +14,7 @@
     "test": "pnpm --filter @orgpay/api test",
     "format": "prettier --write .",
     "db:up": "docker compose -f docker-compose.dev.yml up -d",
-    "scenario": "pnpm --filter @orgpay/api scenario",
+    "proof": "pnpm --filter @orgpay/api proof",
     "seed": "pnpm --filter @orgpay/api seed"
   },
   "devDependencies": {
