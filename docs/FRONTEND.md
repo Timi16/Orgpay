@@ -5,6 +5,8 @@ executes them with Freighter, and tracks every payment to a verified Stellar tra
 [ARCHITECTURE.md](ARCHITECTURE.md) for statuses and the payment lifecycle, and
 [BACKEND.md](BACKEND.md) for the API.
 
+**Status:** not built yet. Everything it needs from the API is built and tested.
+
 ## Stack
 
 Next.js 16 (App Router), React 19, TypeScript strict, SWR for data, `@stellar/freighter-api` 6 for
@@ -43,7 +45,7 @@ apps/web/
 | `/onboarding` | Name the organization, add the funding wallet (address, live USDC and XLM balance, trustline status). |
 | `/dashboard` | Funding wallet balance; paid this month; counts of successful, pending and failed payments (each links to a filtered list); the next draft run with a "Review and execute" button; recent runs. |
 | `/employees` | Table: name, wallet (short, copy, explorer link), salary, wallet status ("Ready" or the reason), active/inactive. Search, status filter, "Add employee", "Check wallets". |
-| `/employees/[id]` | Details with edit and deactivate/reactivate, plus this employee's payment history across runs (run, amount, status, hash link). |
+| `/employees/[id]` | Details with edit and deactivate/reactivate. |
 | `/payroll` | All runs, newest first: run number, name, pay date, status, employee count, total, successful / failed / pending counts. Status filter. "New payroll run". |
 | `/payroll/new` | Name, pay date, funding wallet, employee picker (active employees, select all, search), live total and count. Creates a DRAFT and opens it. |
 | `/payroll/[id]` | The run: review, execute and track. See below. |
