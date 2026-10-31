@@ -232,7 +232,7 @@ function PeopleView() {
                       </button>
                       <span className="faint"> · </span>
                       <button type="button" className="btn-link" style={{ color: "var(--ink-2)" }} disabled={archiving === e.id} onClick={() => void archive(e)} aria-label={`${e.active ? "Deactivate" : "Reactivate"} ${e.name}`}>
-
+                        {e.active ? "Deactivate" : "Reactivate"}
                       </button>
                     </td>
                   </tr>

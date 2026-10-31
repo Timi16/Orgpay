@@ -11,7 +11,7 @@ import { countsText, Ticks } from "@/components/payroll/Ticks";
 import { BatchStatusPill, RunStatusPill } from "@/components/StatusPill";
 import { useToast } from "@/components/Toast";
 import { api, errorMessage } from "@/lib/api";
-import { explorerAccount, explorerTx } from "@/lib/config";
+import { API_URL, explorerAccount, explorerTx } from "@/lib/config";
 import { Seal } from "@/components/payroll/Seal";
 import { countdown, formatAmount, formatDateTime, formatDay, shortAddress, shortHash, sumAmounts } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
@@ -22,28 +22,8 @@ import { AddPeopleDialog } from "./_components/AddPeopleDialog";
 import { Lines } from "./_components/Lines";
 import { ReviewDialog } from "./_components/ReviewDialog";
 
-/** Every line, ready for a spreadsheet. Amounts stay exact decimal strings. */
-function toCsv(run: Run): string {
-  const esc = (v: string | number | null) => {
-    let s = v === null ? "" : String(v);
-    // A cell starting with = + - @ (or a tab/CR) would run as a formula in a spreadsheet.
-    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const head = ["#", "name", "wallet", "amount_usdc", "status", "reason", "tx_hash", "ledger", "paid_at"];
-  const rows = run.payments.map((i) => [i.position, i.name, i.walletAddress, i.amount, i.status, i.failureCode, i.txHash, i.ledger, i.paidAt].map(esc).join(","));
-  return [head.join(","), ...rows].join("\n");
-}
-
-function download(run: Run) {
-  const blob = new Blob([toCsv(run)], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `payroll-${run.number}-${run.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+/** The run as CSV, built by the API: every payment with its status, hash, explorer link and verification time. */
+const exportUrl = (run: Run) => `${API_URL}/v1/payroll-runs/${run.id}/export.csv`;
 
 const PHASE_TEXT: Partial<Record<PayPhase["kind"], string>> = {
   starting: "Checking everyone on Stellar and starting the run…",
@@ -326,9 +306,9 @@ function RunView({ run }: { run: Run }) {
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
         {run.status !== "DRAFT" ? (
-          <button type="button" className="btn btn-secondary" onClick={() => download(run)}>
+          <a className="btn btn-secondary" href={exportUrl(run)} download>
             <Icon name="download" size={16} /> Export CSV
-          </button>
+          </a>
         ) : null}
         {run.status === "DRAFT" ? (
           <button type="button" className="btn btn-danger" onClick={() => setConfirm("delete")}>
@@ -453,7 +433,10 @@ export default function RunPage() {
   const { data, error, mutate } = useSWR<{ run: Run }>(key, {
     refreshInterval: (latest) => {
       const run = latest?.run;
-      return run && (run.counts.submitted > 0 || run.transactions.some((b) => b.status === "SUBMITTED")) ? 2000 : 0;
+      if (!run) return 0;
+      if (run.counts.submitted > 0 || run.transactions.some((b) => b.status === "SUBMITTED")) return 2000;
+      // An unsigned transaction past its window: the worker expires it within about 30 s, then a new one can be signed.
+      return run.transactions.some((b) => b.status === "AWAITING_SIGNATURE" && new Date(b.maxTime).getTime() <= Date.now()) ? 5000 : 0;
     },
   });
   if (error && !data) {

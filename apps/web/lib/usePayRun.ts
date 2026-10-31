@@ -63,7 +63,8 @@ export function usePayRun(run: Run) {
         setPhase({ kind: "starting" });
         await refresh((await api.post<{ run: Run }>(`/v1/payroll-runs/${run.id}/start`)).run);
       }
-      for (let i = 0; i < 50; i++) {
+      // One transaction per payment by default, so a run can need as many signatures as it has employees.
+      for (let i = 0; i < 1000; i++) {
         setPhase({ kind: "preparing" });
         const next = await api.post<{ transaction: SignableBatch | null; run: Run }>(`/v1/payroll-runs/${run.id}/transactions/next`);
         await refresh(next.run);
