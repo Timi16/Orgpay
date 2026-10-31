@@ -1,0 +1,85 @@
+/* The landing page. Tokens come from globals.css. */
+.l-wrap { max-width: 1240px; margin: 0 auto; padding-left: 24px; padding-right: 24px; }
+.l-announce { display: block; background: var(--night); color: var(--on-night); text-align: center; padding: 10px 16px; font-size: 13.5px; text-decoration: none; }
+.l-announce:hover { color: #fff; text-decoration: none; }
+.l-announce b { color: #fff; }
+.l-header { position: sticky; top: 0; z-index: 20; transition: background 0.25s, border-color 0.25s; border-bottom: 1px solid transparent; }
+.l-header[data-scrolled="true"] { background: rgba(243, 244, 240, 0.88); backdrop-filter: blur(10px); border-bottom-color: var(--rule-soft); }
+.l-header nav a { color: var(--ink-2); font-weight: 500; font-size: 14px; }
+.l-header nav a:hover { color: var(--ink); }
+.l-h1 { font-family: var(--font-serif); font-weight: 700; font-size: clamp(44px, 5.6vw, 76px); line-height: 0.98; letter-spacing: -0.035em; margin: 0; }
+.l-h2 { font-family: var(--font-serif); font-weight: 700; font-size: clamp(32px, 3.6vw, 44px); line-height: 1.05; letter-spacing: -0.025em; margin: 0; }
+.l-lead { font-size: 19px; line-height: 1.55; color: var(--ink-2); max-width: 560px; }
+.l-section { padding-top: 72px; padding-bottom: 72px; }
+.l-band { background: var(--sheet); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+.l-night { background: var(--night); color: #fff; }
+.l-night .eyebrow { color: var(--on-night-2); }
+.l-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--ink-2); }
+.l-check svg { color: var(--paid); }
+
+.shine { background: linear-gradient(100deg, var(--green) 40%, #7d93ff 50%, var(--green) 60%); background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+.hero-run { position: relative; }
+.hero-badge { position: absolute; right: -14px; top: -24px; z-index: 2; background: var(--sheet); border: 1px solid var(--rule); border-radius: 999px; padding: 8px 14px; display: flex; gap: 8px; align-items: center; box-shadow: 0 14px 28px -18px rgba(20, 33, 61, 0.5); font-size: 12.5px; font-weight: 600; color: var(--paid); }
+.tear-top { height: 14px; background: radial-gradient(circle at 7px 0, var(--paper) 5px, transparent 5.5px) 0 0 / 14px 14px repeat-x, var(--sheet); border: 1px solid var(--rule); border-bottom: 0; }
+.hero-doc { background: var(--sheet); border: 1px solid var(--rule); border-top: 0; border-radius: 0 0 8px 8px; box-shadow: 0 30px 60px -36px rgba(20, 33, 61, 0.55); padding: 8px 26px 22px; }
+.hero-row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid var(--rule-soft); }
+.hero-row .pill { transition: background 0.3s, color 0.3s; }
+.ticks i { transition: background 0.35s; }
+
+.l-marquee { overflow: hidden; padding: 18px 0; }
+.l-marquee-track { display: flex; gap: 40px; width: max-content; font-family: var(--font-mono); font-size: 13px; color: var(--ink-2); }
+
+.card-lift { background: var(--sheet); border: 1px solid var(--rule); border-radius: 8px; padding: 24px; transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; }
+.card-lift:hover { transform: translateY(-3px); box-shadow: 0 18px 36px -24px rgba(20, 33, 61, 0.45); border-color: #c9d3ff; }
+.l-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
+.l-stat { font-family: var(--font-serif); font-weight: 700; font-size: 48px; color: var(--green); letter-spacing: -0.03em; }
+
+.l-steps { position: relative; }
+.l-steps-line { position: absolute; left: 28px; right: 28px; top: 27px; height: 2px; background: var(--rule); }
+.l-steps-fill { position: absolute; left: 28px; right: 28px; top: 27px; height: 2px; background: var(--green); transform-origin: left; }
+.l-step-num { width: 56px; height: 56px; border-radius: 50%; background: var(--green); color: #fff; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 16px; box-shadow: 0 0 0 6px var(--paper); position: relative; }
+
+.l-checks .row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid var(--rule-soft); font-size: 14px; }
+
+.calc { display: flex; flex-direction: column; gap: 20px; padding: 28px; }
+.calc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.calc-grid > div { border: 1px solid var(--rule-soft); border-radius: 6px; padding: 14px; }
+.calc-num { font-size: 28px; margin-top: 6px; }
+
+.l-night-card { border: 1px solid #26324f; border-radius: 8px; padding: 24px; display: flex; flex-direction: column; gap: 10px; }
+.l-night-card p { margin: 0; font-size: 14.5px; line-height: 1.6; color: #c7cddd; }
+
+.l-compare { width: 100%; border-collapse: collapse; font-size: 15px; min-width: 640px; }
+.l-compare th, .l-compare td { padding: 16px 20px; text-align: left; }
+.l-compare tr + tr td { border-top: 1px solid var(--rule-soft); }
+.l-compare .ours { background: #f5f7ff; }
+
+.l-faq details { border-top: 1px solid var(--rule); }
+.l-faq summary { list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 0; font-weight: 600; font-size: 17px; cursor: pointer; }
+.l-faq summary::-webkit-details-marker { display: none; }
+.l-faq summary .plus { width: 32px; height: 32px; border-radius: 50%; background: var(--sunken); display: flex; align-items: center; justify-content: center; flex: none; transition: transform 0.25s; }
+.l-faq details[open] summary .plus { transform: rotate(45deg); }
+.l-faq p { margin: 0 0 20px; font-size: 15.5px; line-height: 1.6; color: var(--ink-2); max-width: 640px; }
+
+.l-cta { max-width: 1240px; margin: 0 auto; background: var(--green); color: #fff; border-radius: 16px; padding: 56px clamp(24px, 5vw, 64px); display: flex; flex-wrap: wrap; gap: 32px; align-items: center; justify-content: space-between; }
+.l-cta .btn-white { background: #fff; color: var(--night); }
+.l-cta .btn-ghost { color: #fff; border: 1px solid #9fb0ff; background: transparent; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .l-rise { animation: l-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .l-d1 { animation-delay: 0.08s; } .l-d2 { animation-delay: 0.16s; } .l-d3 { animation-delay: 0.24s; } .l-d4 { animation-delay: 0.32s; }
+  .shine { animation: shine 5s linear infinite; }
+  .l-marquee-track { animation: marquee 38s linear infinite; }
+  .l-marquee:hover .l-marquee-track { animation-play-state: paused; }
+  .hero-badge, .l-float { animation: l-float 6s ease-in-out infinite; }
+  .l-steps-fill { animation: l-fill 2.4s cubic-bezier(0.2, 0.7, 0.2, 1) 0.4s both; }
+  .l-faq details[open] p { animation: l-rise 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+}
+@keyframes l-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@keyframes shine { from { background-position: 100% 0; } to { background-position: -200% 0; } }
+@keyframes marquee { to { transform: translateX(-50%); } }
+@keyframes l-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes l-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) { .shine { color: var(--green); background: none; } .l-marquee { overflow-x: auto; } }
+@media (max-width: 640px) { .calc-grid { grid-template-columns: 1fr; } .hero-badge { right: 8px; } .l-steps-line, .l-steps-fill { display: none; } }
