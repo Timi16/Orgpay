@@ -2,24 +2,28 @@ import type { BatchStatus, ItemStatus, PayrollBatch, PayrollRun, Prisma, RunStat
 import type { Tx } from "../../db/prisma";
 import { AppError } from "../../lib/errors";
 
-// The ONLY place run, line and batch statuses change (ESLint enforces it). Every change is a
-// conditional update on the expected current status, made while the caller holds the run's row
-// lock (lockRun), so concurrent requests and the worker can never race a status.
+// The ONLY place run, payment and transaction statuses change (ESLint enforces it). Every change
+// is a conditional update on the expected current status, made while the caller holds the run's
+// row lock (lockRun), so concurrent requests and the worker can never race a status.
+//
+// In the database a payment is a PayrollItem and a Stellar transaction is a PayrollBatch.
 
 export const RUN_ALLOWED: Record<RunStatus, RunStatus[]> = {
-  DRAFT: ["PAYING", "CANCELLED"],
-  PAYING: ["PAID", "PARTIAL", "FAILED", "CANCELLED"],
-  PARTIAL: ["PAYING"], // retry
-  FAILED: ["PAYING", "CANCELLED"], // retry, or give up on everyone
-  PAID: [],
+  DRAFT: ["PROCESSING", "CANCELLED"],
+  PROCESSING: ["COMPLETED", "PARTIALLY_PAID", "FAILED", "CANCELLED"],
+  PARTIALLY_PAID: ["PROCESSING"], // retry
+  FAILED: ["PROCESSING", "CANCELLED"], // retry, or give up on everyone
+  COMPLETED: [],
   CANCELLED: [],
 };
 
 export const ITEM_ALLOWED: Record<ItemStatus, ItemStatus[]> = {
-  PENDING: ["SENDING", "FAILED", "CANCELLED"],
-  SENDING: ["PAID", "FAILED", "PENDING"],
+  PENDING: ["AWAITING_SIGNATURE", "FAILED", "CANCELLED"],
+  // Straight to SUCCESSFUL or FAILED when the signed transaction was submitted outside OrgPay.
+  AWAITING_SIGNATURE: ["SUBMITTED", "SUCCESSFUL", "FAILED", "PENDING"],
+  SUBMITTED: ["SUCCESSFUL", "FAILED", "PENDING"],
   FAILED: ["PENDING", "CANCELLED"], // retry, or give up
-  PAID: [], // a paid line never changes again
+  SUCCESSFUL: [], // a successful payment never changes again
   CANCELLED: [],
 };
 
@@ -30,6 +34,9 @@ export const BATCH_ALLOWED: Record<BatchStatus, BatchStatus[]> = {
   FAILED: [],
   EXPIRED: [],
 };
+
+/** Payment statuses that mean "in a transaction that may still land". */
+export const IN_FLIGHT: ItemStatus[] = ["AWAITING_SIGNATURE", "SUBMITTED"];
 
 export type Actor = "company" | "api" | "system";
 
@@ -74,7 +81,7 @@ export async function transitionRun(
 }
 
 /**
- * Moves lines of one run from `from` to `to`. All of them must be in `from`: a mismatch means
+ * Moves payments of one run from `from` to `to`. All of them must be in `from`: a mismatch means
  * something else changed them, and the whole transaction is rolled back.
  */
 export async function transitionItems(
@@ -94,14 +101,14 @@ export async function transitionItems(
   if (updated.count !== itemIds.length) throw invalid("payment", from, to);
 }
 
-/** Puts PENDING lines into a batch (they become SENDING). */
+/** Puts PENDING payments into a built transaction: they wait for its signature. */
 export async function assignToBatch(tx: Tx, runId: string, batchId: string, itemIds: string[]): Promise<void> {
   for (const [opIndex, id] of itemIds.entries()) {
     const updated = await tx.payrollItem.updateMany({
       where: { runId, id, status: "PENDING" },
-      data: { status: "SENDING", batchId, opIndex, attempts: { increment: 1 } },
+      data: { status: "AWAITING_SIGNATURE", batchId, opIndex, attempts: { increment: 1 } },
     });
-    if (updated.count !== 1) throw invalid("payment", "PENDING", "SENDING");
+    if (updated.count !== 1) throw invalid("payment", "PENDING", "AWAITING_SIGNATURE");
   }
 }
 
@@ -111,40 +118,47 @@ export async function transitionBatch(
   to: BatchStatus,
   data: Prisma.PayrollBatchUpdateManyMutationInput = {},
 ): Promise<void> {
-  if (!BATCH_ALLOWED[batch.status].includes(to)) throw invalid("batch", batch.status, to);
+  if (!BATCH_ALLOWED[batch.status].includes(to)) throw invalid("transaction", batch.status, to);
   const updated = await tx.payrollBatch.updateMany({ where: { id: batch.id, status: batch.status }, data: { ...data, status: to } });
-  if (updated.count !== 1) throw invalid("batch", batch.status, to);
+  if (updated.count !== 1) throw invalid("transaction", batch.status, to);
+}
+
+/** The signed transaction goes to Stellar: it and its payments become SUBMITTED together. */
+export async function markSubmitted(tx: Tx, batch: Pick<PayrollBatch, "id" | "runId" | "status">, signedXdr: string): Promise<void> {
+  await transitionBatch(tx, batch, "SUBMITTED", { signedXdr, submittedAt: new Date() });
+  const items = await tx.payrollItem.findMany({ where: { batchId: batch.id, status: "AWAITING_SIGNATURE" }, select: { id: true } });
+  await transitionItems(tx, batch.runId, items.map((i) => i.id), "AWAITING_SIGNATURE", "SUBMITTED");
 }
 
 /**
- * A PAYING run with nothing left to send or confirm is finished: PAID when no line failed,
- * PARTIAL when some were paid and some failed, FAILED when none were paid. After a cancel, a run
- * that paid nobody is CANCELLED and one that paid some is PARTIAL (never "PAID": not everyone
- * was). Returns the new status, or null when the run is not finished.
+ * A PROCESSING run with nothing left to send or confirm is finished: COMPLETED when every
+ * payment succeeded, PARTIALLY_PAID when some did and some failed, FAILED when none did. After a
+ * cancel, a run that paid nobody is CANCELLED and one that paid some is PARTIALLY_PAID (never
+ * COMPLETED: not everyone was paid). Returns the new status, or null when the run is not finished.
  */
 export async function finishIfDone(tx: Tx, runId: string, actor: Actor, opts: { cancelled?: boolean } = {}): Promise<RunStatus | null> {
   const run = await tx.payrollRun.findUnique({ where: { id: runId }, select: { id: true, status: true } });
-  if (!run || run.status !== "PAYING") return null;
+  if (!run || run.status !== "PROCESSING") return null;
   const groups = await tx.payrollItem.groupBy({ by: ["status"], where: { runId }, _count: { _all: true } });
   const count = (s: ItemStatus) => groups.find((g) => g.status === s)?._count._all ?? 0;
-  if (count("PENDING") > 0 || count("SENDING") > 0) return null;
-  const paid = count("PAID");
+  if (count("PENDING") > 0 || IN_FLIGHT.some((s) => count(s) > 0)) return null;
+  const paid = count("SUCCESSFUL");
   const failed = count("FAILED");
   const cancelled = count("CANCELLED");
   let to: RunStatus;
   let message: string;
   if (opts.cancelled || (paid === 0 && failed === 0)) {
-    to = paid > 0 ? "PARTIAL" : "CANCELLED";
-    message = paid > 0 ? `Cancelled after ${paid} paid; ${cancelled + failed} not paid` : "Cancelled: nobody was paid";
+    to = paid > 0 ? "PARTIALLY_PAID" : "CANCELLED";
+    message = paid > 0 ? `Cancelled after ${paid} successful; ${cancelled + failed} not paid` : "Cancelled: nobody was paid";
   } else if (failed === 0) {
-    to = "PAID";
-    message = `Finished: all ${paid} paid`;
+    to = "COMPLETED";
+    message = `Completed: all ${paid} payments successful`;
   } else if (paid === 0) {
     to = "FAILED";
-    message = `Finished: none of ${failed} paid`;
+    message = `Finished: none of ${failed} payments went through`;
   } else {
-    to = "PARTIAL";
-    message = `Finished: ${paid} paid, ${failed} not paid`;
+    to = "PARTIALLY_PAID";
+    message = `Finished: ${paid} successful, ${failed} failed`;
   }
   await transitionRun(tx, run, to, actor, {
     // A cancelled finish sends no "run finished" email (notifiedAt set).

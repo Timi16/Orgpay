@@ -149,16 +149,16 @@ export function createAuthService(deps: AppDeps) {
           // Every run that could still pay someone. Each is re-read under its lock, so a retry
           // that slipped in after this list is still seen.
           const open = await tx.payrollRun.findMany({
-            where: { companyId, status: { in: ["DRAFT", "PAYING", "PARTIAL", "FAILED"] } },
+            where: { companyId, status: { in: ["DRAFT", "PROCESSING", "PARTIALLY_PAID", "FAILED"] } },
             select: { id: true },
             orderBy: { id: "asc" },
           });
           for (const { id } of open) {
             const run = await lockRun(tx, companyId, id);
-            if (!run || run.status === "PAID" || run.status === "CANCELLED") continue;
+            if (!run || run.status === "COMPLETED" || run.status === "CANCELLED") continue;
             await cancelRun(tx, run, "company").catch((err: unknown) => {
               if (err instanceof AppError && err.code === "RUN_LOCKED") {
-                throw new AppError("RUN_LOCKED", `Payroll #${run.number} has a batch waiting for a signature or for Stellar. Let it finish, then close the account.`);
+                throw new AppError("RUN_LOCKED", `Payroll #${run.number} has a transaction waiting for a signature or for Stellar. Let it finish, then close the account.`);
               }
               throw err;
             });

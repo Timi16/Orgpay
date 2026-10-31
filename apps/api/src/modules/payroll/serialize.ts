@@ -1,6 +1,9 @@
-import type { Batch, FailureCode, Run, RunEvent, RunItem, RunSummary } from "@orgpay/shared";
+import { explorerTxUrl, type FailureCode, type Payment, type Run, type RunEvent, type RunSummary, type StellarTransaction } from "@orgpay/shared";
 import type { PayrollBatch, PayrollEvent, PayrollItem, PayrollRun, Wallet } from "@prisma/client";
 import { formatStroops } from "../../lib/amount";
+
+// In the database a payment is a PayrollItem and a Stellar transaction is a PayrollBatch; the API
+// speaks of payments and transactions.
 
 export type RunWithWallet = PayrollRun & { wallet: Pick<Wallet, "id" | "address" | "label"> };
 type ItemTotals = Pick<PayrollItem, "status" | "amountStroops">[];
@@ -13,14 +16,15 @@ export function serializeRunSummary(run: RunWithWallet, items: ItemTotals): RunS
   let total = 0n;
   let paid = 0n;
   let failed = 0n;
-  const counts = { lines: items.length, pending: 0, sending: 0, paid: 0, failed: 0, cancelled: 0 };
+  const counts = { payments: items.length, pending: 0, awaitingSignature: 0, submitted: 0, successful: 0, failed: 0, cancelled: 0 };
   for (const i of items) {
     if (i.status !== "CANCELLED") total += i.amountStroops;
-    if (i.status === "PAID") paid += i.amountStroops;
+    if (i.status === "SUCCESSFUL") paid += i.amountStroops;
     if (i.status === "FAILED") failed += i.amountStroops;
     if (i.status === "PENDING") counts.pending++;
-    else if (i.status === "SENDING") counts.sending++;
-    else if (i.status === "PAID") counts.paid++;
+    else if (i.status === "AWAITING_SIGNATURE") counts.awaitingSignature++;
+    else if (i.status === "SUBMITTED") counts.submitted++;
+    else if (i.status === "SUCCESSFUL") counts.successful++;
     else if (i.status === "FAILED") counts.failed++;
     else counts.cancelled++;
   }
@@ -33,10 +37,12 @@ export function serializeRunSummary(run: RunWithWallet, items: ItemTotals): RunS
     // The snapshot is what the run pays from; the label is the wallet's current one.
     wallet: { id: run.wallet.id, address: run.walletAddress, label: run.wallet.label },
     asset: { code: run.assetCode, issuer: run.assetIssuer },
+    paymentsPerTx: run.paymentsPerTx,
+    employeeCount: items.length - counts.cancelled,
     total: formatStroops(total),
     totalStroops: total.toString(),
-    paid: formatStroops(paid),
-    paidStroops: paid.toString(),
+    paidTotal: formatStroops(paid),
+    paidTotalStroops: paid.toString(),
     failedTotal: formatStroops(failed),
     counts,
     startedAt: run.startedAt?.toISOString() ?? null,
@@ -46,7 +52,7 @@ export function serializeRunSummary(run: RunWithWallet, items: ItemTotals): RunS
   };
 }
 
-export function serializeBatch(b: PayrollBatch): Batch {
+export function serializeTransaction(b: PayrollBatch): StellarTransaction {
   return {
     id: b.id,
     number: b.number,
@@ -61,12 +67,15 @@ export function serializeBatch(b: PayrollBatch): Batch {
     submittedAt: b.submittedAt?.toISOString() ?? null,
     settledAt: b.settledAt?.toISOString() ?? null,
     createdAt: b.createdAt.toISOString(),
+    // Only a transaction that reached a ledger has an explorer page.
+    explorerUrl: b.ledger !== null ? explorerTxUrl(b.txHash) : null,
   };
 }
 
-export function serializeItem(i: PayrollItem, batchNumbers: Map<string, number>): RunItem {
+export function serializePayment(i: PayrollItem, txNumbers: Map<string, number>): Payment {
   return {
     id: i.id,
+    runId: i.runId,
     position: i.position,
     employeeId: i.employeeId,
     name: i.name,
@@ -76,11 +85,14 @@ export function serializeItem(i: PayrollItem, batchNumbers: Map<string, number>)
     status: i.status,
     failureCode: (i.failureCode as FailureCode | null) ?? null,
     failureDetail: i.failureDetail,
+    // txHash is only set once the ledger record was verified against this payment.
     txHash: i.txHash,
     ledger: i.ledger,
     paidAt: i.paidAt?.toISOString() ?? null,
-    batchNumber: i.batchId ? (batchNumbers.get(i.batchId) ?? null) : null,
+    verifiedAt: i.verifiedAt?.toISOString() ?? null,
+    transactionNumber: i.batchId ? (txNumbers.get(i.batchId) ?? null) : null,
     attempts: i.attempts,
+    explorerUrl: i.txHash ? explorerTxUrl(i.txHash) : null,
   };
 }
 
@@ -90,8 +102,8 @@ function serializeEvent(e: PayrollEvent): RunEvent {
     type: e.type,
     message: e.message,
     actor: e.actor,
-    itemId: e.itemId,
-    batchId: e.batchId,
+    paymentId: e.itemId,
+    transactionId: e.batchId,
     createdAt: e.createdAt.toISOString(),
   };
 }
@@ -99,11 +111,11 @@ function serializeEvent(e: PayrollEvent): RunEvent {
 export function serializeRun(
   run: RunWithWallet & { items: PayrollItem[]; batches: PayrollBatch[]; events: PayrollEvent[] },
 ): Run {
-  const batchNumbers = new Map(run.batches.map((b) => [b.id, b.number]));
+  const txNumbers = new Map(run.batches.map((b) => [b.id, b.number]));
   return {
     ...serializeRunSummary(run, run.items),
-    items: run.items.map((i) => serializeItem(i, batchNumbers)),
-    batches: run.batches.map(serializeBatch),
+    payments: run.items.map((i) => serializePayment(i, txNumbers)),
+    transactions: run.batches.map(serializeTransaction),
     events: run.events.map(serializeEvent),
   };
 }

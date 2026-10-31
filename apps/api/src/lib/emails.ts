@@ -12,7 +12,7 @@ export interface RunFacts {
   id: string;
   number: number;
   name: string;
-  status: "PAID" | "PARTIAL" | "FAILED";
+  status: "COMPLETED" | "PARTIALLY_PAID" | "FAILED";
   assetCode: string;
   paidCount: number;
   paidStroops: bigint;
@@ -30,9 +30,9 @@ const REASONS: Record<string, string> = {
 /** To the company: a payroll run finished. */
 export function runFinishedEmail(to: string, businessName: string, r: RunFacts, webOrigin: string): Mail {
   const subject =
-    r.status === "PAID"
+    r.status === "COMPLETED"
       ? `Payroll #${r.number} paid: ${r.paidCount} people, ${money(r.paidStroops, r.assetCode)}`
-      : r.status === "PARTIAL"
+      : r.status === "PARTIALLY_PAID"
         ? `Payroll #${r.number}: ${r.failed.length} payment(s) not sent`
         : `Payroll #${r.number}: nobody was paid`;
   const failedLines = r.failed.slice(0, 20).map((f) => `  - ${f.name}: ${REASONS[f.reason] ?? f.reason}`);

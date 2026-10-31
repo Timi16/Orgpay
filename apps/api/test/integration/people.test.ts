@@ -8,6 +8,7 @@ import {
   makeApp,
   ORIGIN,
   post as postAs,
+  postOnce,
   prisma,
   resetDb,
   signup,
@@ -38,8 +39,8 @@ describe("people", () => {
     const secret = Keypair.random().secret();
     for (const [path, body] of [
       ["/v1/wallets", { address: secret }],
-      ["/v1/employees", { name: "Ada", walletAddress: secret, defaultAmount: "100" }],
-      ["/v1/employees/import", { employees: [{ name: "Ada", walletAddress: secret, defaultAmount: "100" }] }],
+      ["/v1/employees", { name: "Ada", walletAddress: secret, salary: "100" }],
+      ["/v1/employees/import", { employees: [{ name: "Ada", walletAddress: secret, salary: "100" }] }],
     ] as const) {
       const res = await post(path, body);
       expect(res.status, path).toBe(400);
@@ -48,13 +49,13 @@ describe("people", () => {
     expect((await post("/v1/wallets", { address: secret })).body.error.code).toBe("SECRET_KEY_REJECTED");
     const muxed = "MA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVAAAAAAAAAAAAAJLK";
     for (const address of [muxed, "GABC", "not-an-address", Keypair.random().publicKey().slice(0, 55) + "A"]) {
-      expect((await post("/v1/employees", { name: "X", walletAddress: address, defaultAmount: "1" })).status, address).toBe(400);
+      expect((await post("/v1/employees", { name: "X", walletAddress: address, salary: "1" })).status, address).toBe(400);
       expect((await post("/v1/wallets", { address })).status, address).toBe(400);
     }
     // A secret pasted into any free-text field (names, roles, labels, groups) is refused too.
     for (const [path, body] of [
-      ["/v1/employees", { name: `Ada ${secret}`, walletAddress: Keypair.random().publicKey(), defaultAmount: "1" }],
-      ["/v1/employees", { name: "Ada", role: secret, walletAddress: Keypair.random().publicKey(), defaultAmount: "1" }],
+      ["/v1/employees", { name: `Ada ${secret}`, walletAddress: Keypair.random().publicKey(), salary: "1" }],
+      ["/v1/employees", { name: "Ada", role: secret, walletAddress: Keypair.random().publicKey(), salary: "1" }],
       ["/v1/groups", { name: secret }],
       ["/v1/wallets", { address: Keypair.random().publicKey(), label: secret }],
       ["/v1/api-keys", { name: secret }],
@@ -69,64 +70,66 @@ describe("people", () => {
     expect(dump).not.toContain(secret);
   });
 
-  it("E2: the same wallet on two active people of one company is 409 WALLET_IN_USE; archived people and other companies don't count", async () => {
+  it("E2: the same wallet on two active people of one company is 409 WALLET_IN_USE; deactivated employees and other companies don't count", async () => {
     const wallet = Keypair.random().publicKey();
     const ada = await addEmployee(m, { name: "Ada", walletAddress: wallet });
-    const dup = await post("/v1/employees", { name: "Bob", walletAddress: wallet, defaultAmount: "1" });
+    const dup = await post("/v1/employees", { name: "Bob", walletAddress: wallet, salary: "1" });
     expect(dup.status).toBe(409);
     expect(dup.body.error.code).toBe("WALLET_IN_USE");
     const bob = await addEmployee(m, { name: "Bob" });
     expect((await patch(`/v1/employees/${bob.id}`, { walletAddress: wallet })).body.error.code).toBe("WALLET_IN_USE");
     // Import refuses duplicates within the file and against the team, and adds nobody.
-    const imp = await post("/v1/employees/import", { employees: [{ name: "C", walletAddress: wallet, defaultAmount: "1" }] });
+    const imp = await post("/v1/employees/import", { employees: [{ name: "C", walletAddress: wallet, salary: "1" }] });
     expect(imp.body.error.code).toBe("WALLET_IN_USE");
     const twice = Keypair.random().publicKey();
-    const imp2 = await post("/v1/employees/import", { employees: [{ name: "C", walletAddress: twice, defaultAmount: "1" }, { name: "D", walletAddress: twice, defaultAmount: "1" }] });
+    const imp2 = await post("/v1/employees/import", { employees: [{ name: "C", walletAddress: twice, salary: "1" }, { name: "D", walletAddress: twice, salary: "1" }] });
     expect(imp2.status).toBe(400);
     expect(imp2.body.error.details[0].message).toContain("row 1");
     expect(await prisma.employee.count()).toBe(2);
 
-    // Archived: the wallet is free; restoring the old person is then refused.
-    expect((await post(`/v1/employees/${ada.id}/archive`)).body.employee.archived).toBe(true);
+    // Deactivated: the wallet is free; reactivating the old employee is then refused.
+    expect((await post(`/v1/employees/${ada.id}/deactivate`)).body.employee.active).toBe(false);
     const carol = await addEmployee(m, { name: "Carol", walletAddress: wallet });
-    expect((await post(`/v1/employees/${ada.id}/restore`)).body.error.code).toBe("WALLET_IN_USE");
-    await post(`/v1/employees/${carol.id}/archive`);
-    expect((await post(`/v1/employees/${ada.id}/restore`)).body.employee.archived).toBe(false);
+    expect((await post(`/v1/employees/${ada.id}/reactivate`)).body.error.code).toBe("WALLET_IN_USE");
+    await post(`/v1/employees/${carol.id}/deactivate`);
+    expect((await post(`/v1/employees/${ada.id}/reactivate`)).body.employee.active).toBe(true);
     // Another company can pay the same person.
     const other = await signup(t, "Other");
-    expect((await postAs(other, "/v1/employees", { name: "Ada", walletAddress: wallet, defaultAmount: "1" })).status).toBe(201);
+    expect((await postAs(other, "/v1/employees", { name: "Ada", walletAddress: wallet, salary: "1" })).status).toBe(201);
   });
 
   it("E3: an amount of 0, negative, more than 7 decimals, too large or not a string is 400 (people and run lines)", async () => {
     const wallet = await addFundingWallet(t, m);
-    const person = await addEmployee(m, { defaultAmount: "1500.5" });
-    expect(person).toMatchObject({ defaultAmount: "1500.5000000", defaultAmountStroops: "15005000000" });
+    const person = await addEmployee(m, { salary: "1500.5" });
+    expect(person).toMatchObject({ salary: "1500.5000000", salaryStroops: "15005000000" });
     const run = await createRun(m, wallet, { employeeIds: [person.id] });
-    const item = run.items[0]?.id;
+    const item = run.payments[0]?.id;
     for (const amount of ["0", "-5", "1.12345678", "1e5", "9999999999999", "", " 1", 100]) {
-      expect((await post("/v1/employees", { name: "X", walletAddress: Keypair.random().publicKey(), defaultAmount: amount })).status, String(amount)).toBe(400);
-      expect((await patch(`/v1/employees/${person.id}`, { defaultAmount: amount })).status, String(amount)).toBe(400);
-      expect((await patch(`/v1/payroll-runs/${run.id}/items/${item}`, { amount })).status, String(amount)).toBe(400);
+      expect((await post("/v1/employees", { name: "X", walletAddress: Keypair.random().publicKey(), salary: amount })).status, String(amount)).toBe(400);
+      expect((await patch(`/v1/employees/${person.id}`, { salary: amount })).status, String(amount)).toBe(400);
+      expect((await patch(`/v1/payroll-runs/${run.id}/payments/${item}`, { amount })).status, String(amount)).toBe(400);
     }
-    const ok = await patch(`/v1/payroll-runs/${run.id}/items/${item}`, { amount: "0.0000001" });
+    const ok = await patch(`/v1/payroll-runs/${run.id}/payments/${item}`, { amount: "0.0000001" });
     expect(ok.body.run).toMatchObject({ total: "0.0000001", totalStroops: "1" });
   });
 
-  it("E4: an archived person is left out of new runs and keeps their line on old ones", async () => {
+  it("E4: a deactivated employee is left out of new runs and keeps their line on old ones", async () => {
     const wallet = await addFundingWallet(t, m);
     const g = (await post("/v1/groups", { name: "Engineering" })).body.group;
     const ada = await addEmployee(m, { name: "Ada", groupId: g.id });
     const bob = await addEmployee(m, { name: "Bob", groupId: g.id });
     const before = await createRun(m, wallet, { groupIds: [g.id] });
-    await post(`/v1/employees/${ada.id}/archive`);
+    await post(`/v1/employees/${ada.id}/deactivate`);
     const after = await createRun(m, wallet, { groupIds: [g.id] });
-    expect(after.items.map((i) => i.name)).toEqual(["Bob"]);
-    expect((await post("/v1/payroll-runs", { name: "x", walletId: wallet.id, employeeIds: [ada.id] })).status).toBe(400);
-    // The old run still has Ada, as she was when it was drafted, even after an edit.
+    expect(after.payments.map((i) => i.name)).toEqual(["Bob"]);
+    const withAda = await postOnce(m, "/v1/payroll-runs", { name: "x", walletId: wallet.id, employeeIds: [ada.id] });
+    expect(withAda.status).toBe(400);
+    expect(withAda.body.error.code).toBe("VALIDATION_FAILED");
+    // The old run still has Ada as drafted, even after an edit.
     await patch(`/v1/employees/${ada.id}`, { name: "Ada Lovelace" });
-    expect((await getRun(m, before.id)).items.map((i) => i.name)).toEqual(["Ada", "Bob"]);
+    expect((await getRun(m, before.id)).payments.map((i) => i.name)).toEqual(["Ada", "Bob"]);
     expect((await m.agent.get("/v1/employees")).body.data.map((e: { id: string }) => e.id)).toEqual([bob.id]);
-    expect((await m.agent.get("/v1/employees?status=archived")).body.data.map((e: { id: string }) => e.id)).toEqual([ada.id]);
+    expect((await m.agent.get("/v1/employees?status=inactive")).body.data.map((e: { id: string }) => e.id)).toEqual([ada.id]);
   });
 
   it("E5: deleting a group ungroups its people; group names are unique per company", async () => {
@@ -151,7 +154,7 @@ describe("people", () => {
     t.stellar.setTrustline(lowLimit, { limit: "500" });
     const reasons: Record<string, string | null> = {};
     for (const [address, name] of [[missing, "missing"], [noTrust, "noTrust"], [unauth, "unauth"], [lowLimit, "lowLimit"], [fine, "fine"]] as const) {
-      const e = await addEmployee(m, { name, walletAddress: address, defaultAmount: "1000" });
+      const e = await addEmployee(m, { name, walletAddress: address, salary: "1000" });
       reasons[name] = e.check.status === "ready" ? null : e.check.reason;
     }
     expect(reasons).toEqual({ missing: "ACCOUNT_NOT_FOUND", noTrust: "NO_TRUSTLINE", unauth: "NOT_AUTHORIZED", lowLimit: "TRUSTLINE_LIMIT_TOO_LOW", fine: null });
@@ -188,9 +191,9 @@ describe("people", () => {
 
   it("imports up to 500 people at once, creating groups by name", async () => {
     const rows = [
-      { name: "Ada", walletAddress: Keypair.random().publicKey(), defaultAmount: "3200", group: "Contractors", email: "ada@x.example" },
-      { name: "Kenji", walletAddress: Keypair.random().publicKey(), defaultAmount: "2850.50", group: "Contractors" },
-      { name: "Priya", walletAddress: Keypair.random().publicKey(), defaultAmount: "4100", group: null },
+      { name: "Ada", walletAddress: Keypair.random().publicKey(), salary: "3200", group: "Contractors", email: "ada@x.example" },
+      { name: "Kenji", walletAddress: Keypair.random().publicKey(), salary: "2850.50", group: "Contractors" },
+      { name: "Priya", walletAddress: Keypair.random().publicKey(), salary: "4100", group: null },
     ];
     const res = await post("/v1/employees/import", { employees: rows });
     expect(res.status).toBe(201);

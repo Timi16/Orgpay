@@ -1,5 +1,4 @@
-import type { ReceiveProblem, RunCheck } from "@orgpay/shared";
-import { MAX_BATCH_OPS } from "@orgpay/shared";
+import { explorerTxUrl, type PaymentDetail, type PaymentVerification, type ReceiveProblem, type RunCheck } from "@orgpay/shared";
 import type { PayrollBatch, PayrollItem, PayrollRun, RunStatus } from "@prisma/client";
 import { env } from "../../config/env";
 import type { Tx } from "../../db/prisma";
@@ -11,11 +10,12 @@ import { AppError, notFound } from "../../lib/errors";
 import { fundingCheck, fundingError, receiveProblem } from "../../stellar/checks";
 import { loadAccounts, type AccountState } from "../../stellar/gateway";
 import { decodeResultXdr } from "../../stellar/results";
-import { batchMemo, buildBatchTransaction, checkSignedBatch } from "./batches";
+import { allPassed, verifyPayment } from "../../stellar/verify";
+import { buildBatchTransaction, checkSignedBatch, transactionMemo } from "./batches";
 import * as repo from "./repo";
-import { serializeBatch, serializeRun, serializeRunSummary } from "./serialize";
+import { serializePayment, serializeRun, serializeRunSummary, serializeTransaction } from "./serialize";
 import { isOpen, settleBatch, type BatchOutcome } from "./settle";
-import { assignToBatch, finishIfDone, lockRun, recordEvent, transitionBatch, transitionItems, transitionRun, type Actor } from "./transitions";
+import { assignToBatch, finishIfDone, lockRun, markSubmitted, recordEvent, transitionItems, transitionRun, type Actor } from "./transitions";
 
 /** Most lines on one run. */
 export const MAX_RUN_LINES = 1000;
@@ -55,15 +55,15 @@ export async function cancelRun(tx: Tx, run: PayrollRun, actor: Actor): Promise<
     await transitionRun(tx, run, "CANCELLED", actor, { data: { finishedAt: new Date() }, event: { type: "cancelled", message: "Draft cancelled" } });
     return;
   }
-  if (run.status === "PAID" || run.status === "CANCELLED") throw new AppError("RUN_LOCKED", "This run is already finished");
+  if (run.status === "COMPLETED" || run.status === "CANCELLED") throw new AppError("RUN_LOCKED", "This run is already finished");
   if (await tx.payrollBatch.count({ where: { runId: run.id, status: { in: ["AWAITING_SIGNATURE", "SUBMITTED"] } } })) {
-    throw new AppError("RUN_LOCKED", "A batch is waiting for a signature or for Stellar. Wait for it to finish or expire, then cancel.");
+    throw new AppError("RUN_LOCKED", "A transaction is waiting for a signature or for Stellar. Wait for it to finish or expire, then cancel.");
   }
   const pending = await unpaid("PENDING");
   const failed = await unpaid("FAILED");
   await transitionItems(tx, run.id, pending, "PENDING", "CANCELLED");
   await transitionItems(tx, run.id, failed, "FAILED", "CANCELLED");
-  if (run.status === "PAYING") {
+  if (run.status === "PROCESSING") {
     await finishIfDone(tx, run.id, actor, { cancelled: true });
   } else {
     if (run.status === "FAILED") await transitionRun(tx, run, "CANCELLED", actor);
@@ -98,15 +98,15 @@ export function createPayrollService(deps: AppDeps) {
       if (found !== new Set(groupIds).size) throw notFound("Group");
     }
     if (employeeIds.length > 0) {
-      const found = await prisma.employee.count({ where: { companyId, id: { in: employeeIds }, archivedAt: null } });
+      const found = await prisma.employee.count({ where: { companyId, id: { in: employeeIds }, deactivatedAt: null } });
       if (found !== new Set(employeeIds).size) {
-        throw new AppError("VALIDATION_FAILED", "Some of the people picked were not found or are archived", {
-          details: [{ path: "employeeIds", message: "Unknown or archived person" }],
+        throw new AppError("VALIDATION_FAILED", "Some of the people picked were not found or are deactivated", {
+          details: [{ path: "employeeIds", message: "Unknown or deactivated employee" }],
         });
       }
     }
     return prisma.employee.findMany({
-      where: { companyId, archivedAt: null, OR: [{ id: { in: employeeIds } }, { groupId: { in: groupIds } }] },
+      where: { companyId, deactivatedAt: null, OR: [{ id: { in: employeeIds } }, { groupId: { in: groupIds } }] },
       orderBy: [{ name: "asc" }, { id: "asc" }],
     });
   }
@@ -128,7 +128,7 @@ export function createPayrollService(deps: AppDeps) {
           position: ++position,
           name: e.name,
           walletAddress: e.walletAddress,
-          amountStroops: e.defaultAmountStroops,
+          amountStroops: e.salaryStroops,
         })),
       });
     }
@@ -146,7 +146,7 @@ export function createPayrollService(deps: AppDeps) {
     const checkedAt = new Date();
     await Promise.all(
       [...results].map(([walletAddress, problem]) =>
-        prisma.employee.updateMany({ where: { companyId, walletAddress, archivedAt: null }, data: { checkReason: problem, checkedAt } }),
+        prisma.employee.updateMany({ where: { companyId, walletAddress, deactivatedAt: null }, data: { checkReason: problem, checkedAt } }),
       ),
     ).catch((err: unknown) => deps.logger.warn({ err }, "could not store recipient checks"));
   }
@@ -175,11 +175,13 @@ export function createPayrollService(deps: AppDeps) {
   }
 
   /**
-   * Asks Stellar what became of an open batch and settles it if the answer is final. Only the
-   * ledger's own record is final: found → confirmed or failed with its real close time. "Expired"
-   * must be certain, or the next batch would pay the same people again, so it needs all of:
-   *  - a ledger that closed after the batch's window (plus a grace period: 2 minutes when the
-   *    funding account has already used the batch's sequence number, 30 s otherwise),
+   * Asks Stellar what became of an open transaction and settles it if the answer is final. Only
+   * the ledger's own record is final: found and successful → every payment in it is verified
+   * against the record before it becomes SUCCESSFUL; found and failed → failed with per-payment
+   * reasons. "Expired" must be certain, or the next transaction would pay the same people again,
+   * so it needs all of:
+   *  - a ledger that closed after the transaction's window (plus a grace period: 2 minutes when
+   *    the funding account has already used its sequence number, 30 s otherwise),
    *  - read BEFORE the hash lookup (anything landed by then is findable), and
    *  - a "not found" from a Horizon node that had itself ingested at least that ledger.
    */
@@ -194,8 +196,8 @@ export function createPayrollService(deps: AppDeps) {
     let outcome: BatchOutcome | null = null;
     if (found) {
       outcome = found.successful
-        ? { kind: "success", ledger: found.ledger, closedAt: found.closedAt }
-        : { kind: "failed", ...decodeResultXdr(found.resultXdr) };
+        ? { kind: "success", record: found }
+        : { kind: "failed", ...decodeResultXdr(found.resultXdr), ledger: found.ledger, closedAt: found.closedAt };
     } else if (pastWindow && account) {
       const sequenceUsed = account.exists && BigInt(account.sequence) >= BigInt(batch.sequence);
       const deadline = batch.maxTime.getTime() + (sequenceUsed ? EXPIRY_GRACE_MS : EXPIRY_MIN_GRACE_MS);
@@ -204,13 +206,22 @@ export function createPayrollService(deps: AppDeps) {
     }
     if (!outcome) return false;
     const settled = outcome;
-    return inRunLock(batch.companyId, batch.runId, (tx) => settleBatch(tx, batch.id, settled, actor));
+    const result = await inRunLock(batch.companyId, batch.runId, (tx) => settleBatch(tx, batch.id, settled, actor));
+    if (result === "unverified") {
+      // Can't happen for a transaction whose hash matched the one OrgPay built, but if it ever
+      // does, nobody is marked paid: the payments stay where they are and a person looks.
+      deps.logger.error(
+        { alert: true, batchId: batch.id, txHash: batch.txHash },
+        "ledger record does not match the payments OrgPay built; not marking them successful",
+      );
+    }
+    return result === "settled";
   }
 
   /**
-   * Sends a signed batch to Stellar. Whatever Horizon answers, the batch is settled only from the
-   * ledger's record (looked up straight away, then by the confirmer); a rejection is recorded so the
-   * company can see it, but never taken as proof the envelope can't land.
+   * Sends a signed transaction to Stellar. Whatever Horizon answers, it is settled only from the
+   * ledger's record (looked up straight away, then by the confirmer); a rejection is recorded so
+   * the company can see it, but never taken as proof the envelope can't land.
    */
   async function broadcast(batch: PayrollBatch, signedXdr: string, actor: Actor): Promise<void> {
     const result = await stellar.submit(signedXdr);
@@ -256,7 +267,7 @@ export function createPayrollService(deps: AppDeps) {
 
     async create(
       companyId: string,
-      input: { name: string; walletId: string; payDate?: string | null; groupIds?: string[]; employeeIds?: string[] },
+      input: { name: string; walletId: string; payDate?: string | null; paymentsPerTx?: number; groupIds?: string[]; employeeIds?: string[] },
       via: "dashboard" | "api",
     ) {
       const wallet = await activeWallet(companyId, input.walletId);
@@ -274,20 +285,21 @@ export function createPayrollService(deps: AppDeps) {
             walletAddress: wallet.address,
             assetCode: asset.code,
             assetIssuer: asset.issuer,
+            paymentsPerTx: input.paymentsPerTx ?? 1,
             createdVia: via,
           },
         });
         const added = await addLines(tx, run, employees);
         await recordEvent(tx, run.id, via === "api" ? "api" : "company", {
           type: "created",
-          message: `Draft created with ${added} ${added === 1 ? "person" : "people"}`,
+          message: `Draft created with ${added} ${added === 1 ? "employee" : "employees"}`,
         });
         return run.id;
       });
       return getRun(companyId, id);
     },
 
-    async update(companyId: string, id: string, input: { name?: string; payDate?: string | null; walletId?: string }) {
+    async update(companyId: string, id: string, input: { name?: string; payDate?: string | null; walletId?: string; paymentsPerTx?: number }) {
       const wallet = input.walletId ? await activeWallet(companyId, input.walletId) : null;
       await inRunLock(companyId, id, async (tx, run) => {
         if (run.status !== "DRAFT") throw locked();
@@ -296,6 +308,7 @@ export function createPayrollService(deps: AppDeps) {
           data: {
             name: input.name,
             payDate: payDateValue(input.payDate),
+            paymentsPerTx: input.paymentsPerTx,
             ...(wallet ? { walletId: wallet.id, walletAddress: wallet.address } : {}),
           },
         });
@@ -319,7 +332,7 @@ export function createPayrollService(deps: AppDeps) {
       await inRunLock(companyId, id, async (tx, run) => {
         if (run.status !== "DRAFT") throw locked();
         const updated = await tx.payrollItem.updateMany({ where: { id: itemId, runId: run.id }, data: { amountStroops } });
-        if (updated.count === 0) throw notFound("Line");
+        if (updated.count === 0) throw notFound("Payment");
         await tx.payrollRun.update({ where: { id: run.id }, data: { updatedAt: new Date() } });
       });
       return getRun(companyId, id);
@@ -329,7 +342,7 @@ export function createPayrollService(deps: AppDeps) {
       await inRunLock(companyId, id, async (tx, run) => {
         if (run.status !== "DRAFT") throw locked();
         const deleted = await tx.payrollItem.deleteMany({ where: { id: itemId, runId: run.id } });
-        if (deleted.count === 0) throw notFound("Line");
+        if (deleted.count === 0) throw notFound("Payment");
         await tx.payrollRun.update({ where: { id: run.id }, data: { updatedAt: new Date() } });
       });
       return getRun(companyId, id);
@@ -356,8 +369,24 @@ export function createPayrollService(deps: AppDeps) {
       const payable = items.filter((i) => !problems.get(i.id));
       const payableTotal = payable.reduce((sum, i) => sum + i.amountStroops, 0n);
       const funding = fundingCheck(accounts.get(run.walletAddress) ?? { exists: false }, usdc(), payableTotal, payable.length);
+      // Another run for the same pay date that has already paid (or is paying) one of these
+      // employees is most likely a duplicate payroll. It's allowed, but the admin is told.
+      const alsoPaid = run.payDate
+        ? await prisma.payrollItem.findMany({
+            where: {
+              companyId,
+              runId: { not: run.id },
+              employeeId: { in: items.flatMap((i) => (i.employeeId ? [i.employeeId] : [])) },
+              status: { in: ["PENDING", "AWAITING_SIGNATURE", "SUBMITTED", "SUCCESSFUL"] },
+              run: { payDate: run.payDate, status: { notIn: ["DRAFT", "CANCELLED"] } },
+            },
+            include: { run: { select: { id: true, number: true } } },
+            orderBy: { run: { number: "asc" } },
+          })
+        : [];
+      const byEmployee = new Map(items.map((i) => [i.employeeId, i]));
       return {
-        lines: items.map((i) => ({ itemId: i.id, ok: !problems.get(i.id), reason: problems.get(i.id) ?? null })),
+        payments: items.map((i) => ({ paymentId: i.id, ok: !problems.get(i.id), reason: problems.get(i.id) ?? null })),
         payableCount: payable.length,
         payableTotal: formatStroops(payableTotal),
         excludedCount: items.length - payable.length,
@@ -370,19 +399,27 @@ export function createPayrollService(deps: AppDeps) {
           problem: funding.problem,
           shortBy: funding.shortBy === null ? null : formatStroops(funding.shortBy),
         },
+        alsoPaidElsewhere: alsoPaid.flatMap((other) => {
+          const mine = other.employeeId ? byEmployee.get(other.employeeId) : undefined;
+          return mine && other.employeeId
+            ? [{ paymentId: mine.id, employeeId: other.employeeId, name: mine.name, runId: other.run.id, runNumber: other.run.number }]
+            : [];
+        }),
         checkedAt: new Date().toISOString(),
       };
     },
 
     /**
-     * DRAFT → PAYING. Every recipient and the funding wallet are loaded fresh. People who can't
-     * receive are marked FAILED (never sent); if the wallet can't cover the rest nothing changes.
+     * Executes a draft: DRAFT → PROCESSING. Every recipient and the funding wallet are loaded
+     * fresh. Employees who can't receive are marked FAILED (never sent); if the wallet can't cover
+     * the rest nothing changes. Executing a run twice is refused (409), so a repeated click can't
+     * start anything again.
      */
     async start(companyId: string, id: string, actor: Actor) {
       const run = await repo.findRun(prisma, companyId, id);
       if (!run) throw notFound("Payroll run");
-      if (run.status !== "DRAFT") throw locked("This run has already been started");
-      if ((await prisma.payrollRun.count({ where: { companyId, status: "PAYING" } })) >= MAX_PAYING_RUNS) {
+      if (run.status !== "DRAFT") throw new AppError("INVALID_TRANSITION", "This run has already been executed");
+      if ((await prisma.payrollRun.count({ where: { companyId, status: "PROCESSING" } })) >= MAX_PAYING_RUNS) {
         throw new AppError("LIMIT_REACHED", `You already have ${MAX_PAYING_RUNS} runs being paid. Finish or cancel one first.`);
       }
       await activeWallet(companyId, run.walletId).catch(() => {
@@ -411,11 +448,11 @@ export function createPayrollService(deps: AppDeps) {
         if (!sameLines(items, now)) throw changedMeanwhile();
         await markExcluded(tx, current, items, problems, actor);
         const excluded = items.length - payable.length;
-        await transitionRun(tx, current, "PAYING", actor, {
+        await transitionRun(tx, current, "PROCESSING", actor, {
           data: { startedAt: new Date() },
           event: {
             type: "started",
-            message: `Started: ${payable.length} to pay, ${formatStroops(total)} ${run.assetCode}${excluded ? `; ${excluded} can't receive and won't be sent` : ""}`,
+            message: `Executed: ${payable.length} to pay, ${formatStroops(total)} ${run.assetCode}${excluded ? `; ${excluded} can't receive and won't be sent` : ""}`,
           },
         });
       });
@@ -423,30 +460,35 @@ export function createPayrollService(deps: AppDeps) {
     },
 
     /**
-     * The batch to sign next. While a batch is open (waiting for a signature or for Stellar) it is
-     * returned again, never replaced: two envelopes that could both land would pay people twice.
+     * The transaction to sign next: the next `paymentsPerTx` pending payments (1 by default). While
+     * a transaction is open (waiting for a signature or for Stellar) it is returned again, never
+     * replaced: two envelopes that could both land would pay people twice.
      */
-    async nextBatch(companyId: string, id: string, actor: Actor) {
+    async nextTransaction(companyId: string, id: string, actor: Actor) {
+      const signable = async (b: PayrollBatch) => {
+        const paymentIds = (await prisma.payrollItem.findMany({ where: { batchId: b.id }, orderBy: { opIndex: "asc" }, select: { id: true } })).map((i) => i.id);
+        return { ...serializeTransaction(b), xdr: b.envelopeXdr, networkPassphrase: env.NETWORK_PASSPHRASE, paymentIds };
+      };
       for (let round = 0; round < 12; round++) {
         const run = await repo.findRun(prisma, companyId, id);
         if (!run) throw notFound("Payroll run");
-        if (run.status === "DRAFT") throw locked("Start the run before signing");
-        if (run.status !== "PAYING") return { batch: null, run: await getRun(companyId, id) };
+        if (run.status === "DRAFT") throw locked("Execute the run before signing");
+        if (run.status !== "PROCESSING") return { transaction: null, run: await getRun(companyId, id) };
 
         const open = await repo.openBatch(prisma, companyId, run.id);
         if (open) {
           if (open.status === "AWAITING_SIGNATURE" && open.maxTime.getTime() > Date.now()) {
-            return { batch: { ...serializeBatch(open), xdr: open.envelopeXdr, networkPassphrase: env.NETWORK_PASSPHRASE }, run: await getRun(companyId, id) };
+            return { transaction: await signable(open), run: await getRun(companyId, id) };
           }
           // Past its window by our clock, or with Stellar: settle it if the ledger agrees, else wait.
           if (await resolveBatch(open, actor)) continue;
-          return { batch: null, run: await getRun(companyId, id) };
+          return { transaction: null, run: await getRun(companyId, id) };
         }
 
-        const lines = await repo.itemsByStatus(prisma, companyId, run.id, "PENDING", MAX_BATCH_OPS);
+        const lines = await repo.itemsByStatus(prisma, companyId, run.id, "PENDING", run.paymentsPerTx);
         if (lines.length === 0) {
           await inRunLock(companyId, id, (tx) => finishIfDone(tx, run.id, actor));
-          return { batch: null, run: await getRun(companyId, id) };
+          return { transaction: null, run: await getRun(companyId, id) };
         }
         const accounts = await loadAccounts(stellar, [run.walletAddress, ...lines.map((i) => i.walletAddress)]);
         const problems = problemsFor(lines, accounts);
@@ -455,7 +497,7 @@ export function createPayrollService(deps: AppDeps) {
         const funder = accounts.get(run.walletAddress) ?? { exists: false as const };
 
         const built = await inRunLock(companyId, id, async (tx, current) => {
-          if (current.status !== "PAYING") throw changedMeanwhile();
+          if (current.status !== "PROCESSING") throw changedMeanwhile();
           if (await repo.openBatch(tx, companyId, run.id)) throw changedMeanwhile();
           const now = await tx.payrollItem.findMany({ where: { runId: run.id, id: { in: lines.map((l) => l.id) }, status: "PENDING" } });
           if (!sameLines(lines, now)) throw changedMeanwhile();
@@ -482,15 +524,15 @@ export function createPayrollService(deps: AppDeps) {
           });
           const floor = landed.reduce((max, b) => (BigInt(b.sequence) > max ? BigInt(b.sequence) : max), BigInt(funder.sequence));
           const accountSequence = floor.toString();
+          const number = (await tx.payrollBatch.count({ where: { runId: run.id } })) + 1;
           const envelope = buildBatchTransaction({
             source: current.walletAddress,
             accountSequence,
             asset: { code: current.assetCode, issuer: current.assetIssuer },
             lines: payable.map((i) => ({ destination: i.walletAddress, amountStroops: i.amountStroops })),
-            memo: batchMemo(current.number),
+            memo: transactionMemo(current.number, payable.map((i) => i.position), number),
             maxTime,
           });
-          const number = (await tx.payrollBatch.count({ where: { runId: run.id } })) + 1;
           const batch = await tx.payrollBatch.create({
             data: {
               runId: run.id,
@@ -505,46 +547,45 @@ export function createPayrollService(deps: AppDeps) {
             },
           });
           await assignToBatch(tx, run.id, batch.id, payable.map((i) => i.id));
+          const who = payable.length === 1 ? (payable[0]?.name ?? "1 payment") : `${payable.length} payments`;
           await recordEvent(tx, run.id, actor, {
-            type: "batch_built",
+            type: "transaction_built",
             batchId: batch.id,
-            message: `Batch ${number} ready to sign: ${payable.length} payments, ${formatStroops(total)} ${current.assetCode}`,
+            message: `Transaction ${number} ready to sign: ${who}, ${formatStroops(total)} ${current.assetCode}`,
           });
           return batch;
         });
-        if (built) {
-          return { batch: { ...serializeBatch(built), xdr: built.envelopeXdr, networkPassphrase: env.NETWORK_PASSPHRASE }, run: await getRun(companyId, id) };
-        }
+        if (built) return { transaction: await signable(built), run: await getRun(companyId, id) };
       }
-      return { batch: null, run: await getRun(companyId, id) };
+      return { transaction: null, run: await getRun(companyId, id) };
     },
 
-    /** Takes the signed batch, proves it is ours, submits it and records what Stellar says. */
-    async submit(companyId: string, id: string, batchId: string, signedXdr: string, actor: Actor) {
+    /** Takes the signed transaction, proves it is ours, submits it and records what Stellar says. */
+    async submit(companyId: string, id: string, txId: string, signedXdr: string, actor: Actor) {
       const { batch, fresh } = await inRunLock(companyId, id, async (tx, run) => {
-        const batch = await repo.findBatch(tx, companyId, run.id, batchId);
-        if (!batch) throw notFound("Batch");
+        const batch = await repo.findBatch(tx, companyId, run.id, txId);
+        if (!batch) throw notFound("Transaction");
         checkSignedBatch(signedXdr, { hash: batch.txHash, source: run.walletAddress });
         if (batch.status !== "AWAITING_SIGNATURE") {
           // Already submitted (a retry, a double click, or the confirmer got there): never send twice.
           return { batch, fresh: false };
         }
-        await transitionBatch(tx, batch, "SUBMITTED", { signedXdr, submittedAt: new Date() });
-        await recordEvent(tx, run.id, actor, { type: "submitted", batchId: batch.id, message: `Batch ${batch.number} signed and sent to Stellar` });
+        await markSubmitted(tx, batch, signedXdr);
+        await recordEvent(tx, run.id, actor, { type: "submitted", batchId: batch.id, message: `Transaction ${batch.number} signed and submitted to Stellar` });
         return { batch, fresh: true };
       });
 
       if (fresh) await broadcast(batch, signedXdr, actor);
       // Anything else ("unknown", or a rejection that isn't final) stays SUBMITTED for the confirmer.
       const after = await prisma.payrollBatch.findUniqueOrThrow({ where: { id: batch.id } });
-      return { batch: serializeBatch(after), run: await getRun(companyId, id), settled: !isOpen(after) };
+      return { transaction: serializeTransaction(after), run: await getRun(companyId, id), settled: !isOpen(after) };
     },
 
-    /** FAILED lines that now pass a fresh check go back to PENDING; the rest keep failing, with the new reason. */
+    /** FAILED payments that now pass a fresh check go back to PENDING; the rest keep failing, with the new reason. */
     async retry(companyId: string, id: string, itemIds: string[] | undefined, actor: Actor) {
       const run = await repo.findRun(prisma, companyId, id);
       if (!run) throw notFound("Payroll run");
-      if (!["PAYING", "PARTIAL", "FAILED"].includes(run.status)) throw locked("Only a run that has been started can be retried");
+      if (!["PROCESSING", "PARTIALLY_PAID", "FAILED"].includes(run.status)) throw locked("Only a run that has been executed can be retried");
       const failed = await prisma.payrollItem.findMany({
         where: { runId: run.id, status: "FAILED", ...(itemIds ? { id: { in: itemIds } } : {}) },
         orderBy: { position: "asc" },
@@ -569,8 +610,8 @@ export function createPayrollService(deps: AppDeps) {
           opIndex: null,
         });
         const message = `Retry: ${ready.length} ready to send${failed.length > ready.length ? `, ${failed.length - ready.length} still can't receive` : ""}`;
-        if (ready.length > 0 && (current.status === "PARTIAL" || current.status === "FAILED")) {
-          await transitionRun(tx, current, "PAYING", actor, { data: { finishedAt: null }, event: { type: "retried", message } });
+        if (ready.length > 0 && (current.status === "PARTIALLY_PAID" || current.status === "FAILED")) {
+          await transitionRun(tx, current, "PROCESSING", actor, { data: { finishedAt: null }, event: { type: "retried", message } });
         } else {
           await recordEvent(tx, run.id, actor, { type: "retried", message });
         }
@@ -587,7 +628,74 @@ export function createPayrollService(deps: AppDeps) {
       await inRunLock(companyId, id, (tx, run) => cancelRun(tx, run, actor));
       return getRun(companyId, id);
     },
+
+    async getPayment(companyId: string, paymentId: string): Promise<PaymentDetail> {
+      const item = await prisma.payrollItem.findFirst({ where: { id: paymentId, companyId }, include: { run: true, batch: true } });
+      if (!item) throw notFound("Payment");
+      const txNumbers = new Map(item.batch ? [[item.batch.id, item.batch.number]] : []);
+      return {
+        ...serializePayment(item, txNumbers),
+        run: { id: item.run.id, number: item.run.number, name: item.run.name, status: item.run.status },
+      };
+    },
+
+    /**
+     * Re-checks a payment against the ledger, straight from Horizon: anyone can confirm a
+     * record without trusting OrgPay's database. Read-only; it never changes a status.
+     */
+    async verify(companyId: string, paymentId: string): Promise<PaymentVerification> {
+      const item = await prisma.payrollItem.findFirst({ where: { id: paymentId, companyId }, include: { run: true, batch: true } });
+      if (!item) throw notFound("Payment");
+      const txHash = item.txHash ?? item.batch?.txHash ?? null;
+      const found = txHash ? (await stellar.getTransaction(txHash)).found : null;
+      const checks = verifyPayment(
+        found,
+        { txHash: txHash ?? "", source: item.run.walletAddress, asset: { code: item.run.assetCode, issuer: item.run.assetIssuer } },
+        { opIndex: item.opIndex ?? -1, walletAddress: item.walletAddress, amountStroops: item.amountStroops },
+      );
+      return {
+        paymentId: item.id,
+        status: item.status,
+        txHash,
+        verified: allPassed(checks),
+        checks,
+        ledger: found?.ledger ?? null,
+        closedAt: found?.closedAt.toISOString() ?? null,
+        explorerUrl: found && txHash ? explorerTxUrl(txHash) : null,
+        checkedAt: new Date().toISOString(),
+      };
+    },
+
+    /** Every payment on a run as CSV, with its hash and explorer link. */
+    async exportCsv(companyId: string, id: string): Promise<string> {
+      const run = await getRun(companyId, id);
+      const header = ["run", "position", "employee_id", "name", "wallet", "amount", "asset", "status", "failure", "tx_hash", "ledger", "paid_at", "verified_at", "explorer_url"];
+      const rows = run.payments.map((p) => [
+        run.number,
+        p.position,
+        p.employeeId ?? "",
+        p.name,
+        p.walletAddress,
+        p.amount,
+        run.asset.code,
+        p.status,
+        p.failureCode ?? "",
+        p.txHash ?? "",
+        p.ledger ?? "",
+        p.paidAt ?? "",
+        p.verifiedAt ?? "",
+        p.explorerUrl ?? "",
+      ]);
+      return [header, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+    },
   };
+}
+
+/** Quotes a CSV cell, and defuses text a spreadsheet would run as a formula. */
+function csvCell(value: string | number): string {
+  let s = String(value);
+  if (/^[=+\-@\t\r]/.test(s) && typeof value === "string") s = `'${s}`;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 export type PayrollService = ReturnType<typeof createPayrollService>;

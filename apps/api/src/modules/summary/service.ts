@@ -15,17 +15,17 @@ export function createSummaryService(deps: AppDeps) {
     async get(companyId: string, now = new Date()): Promise<Summary> {
       const thisMonth = monthStart(now);
       const sixAgo = monthStart(now, -5);
-      const [paidRows, failedLines, activeEmployees, employeesWithProblems, drafts, active, recent] = await Promise.all([
+      const [paidRows, failedPayments, activeEmployees, employeesWithProblems, drafts, active, recent] = await Promise.all([
         prisma.payrollItem.findMany({
-          where: { companyId, status: "PAID", paidAt: { gte: sixAgo } },
+          where: { companyId, status: "SUCCESSFUL", paidAt: { gte: sixAgo } },
           select: { paidAt: true, amountStroops: true, employeeId: true, walletAddress: true },
         }),
         prisma.payrollItem.count({ where: { companyId, status: "FAILED" } }),
-        prisma.employee.count({ where: { companyId, archivedAt: null } }),
-        prisma.employee.count({ where: { companyId, archivedAt: null, checkReason: { not: null } } }),
+        prisma.employee.count({ where: { companyId, deactivatedAt: null } }),
+        prisma.employee.count({ where: { companyId, deactivatedAt: null, checkReason: { not: null } } }),
         repo.runsWithTotals(prisma, companyId, { status: "DRAFT" }, 5, [{ payDate: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }]),
-        repo.runsWithTotals(prisma, companyId, { status: "PAYING" }, 5, [{ startedAt: "desc" }]),
-        repo.runsWithTotals(prisma, companyId, { status: { in: ["PAID", "PARTIAL", "FAILED"] } }, 6, [{ finishedAt: "desc" }]),
+        repo.runsWithTotals(prisma, companyId, { status: "PROCESSING" }, 5, [{ startedAt: "desc" }]),
+        repo.runsWithTotals(prisma, companyId, { status: { in: ["COMPLETED", "PARTIALLY_PAID", "FAILED"] } }, 6, [{ finishedAt: "desc" }]),
       ]);
 
       const monthly = Array.from({ length: 6 }, (_, i) => ({ start: monthStart(now, i - 5), paid: 0n }));
@@ -45,7 +45,7 @@ export function createSummaryService(deps: AppDeps) {
       return {
         paidThisMonth: formatStroops(paidThisMonth),
         peoplePaidThisMonth: people.size,
-        failedLines,
+        failedPayments,
         activeEmployees,
         employeesWithProblems,
         draftRuns: drafts.map((r) => serializeRunSummary(r, r.items)),

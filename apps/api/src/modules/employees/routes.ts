@@ -47,14 +47,14 @@ export function employeeRoutes(service: EmployeeService): Router {
     res.json({ employee: serializeEmployee(await service.update(authOf(req).companyId, id, body)) });
   });
 
-  router.post("/:id/archive", async (req, res) => {
+  router.post("/:id/deactivate", async (req, res) => {
     const { id } = parse(IdParamsSchema, req.params);
-    res.json({ employee: serializeEmployee(await service.archive(authOf(req).companyId, id)) });
+    res.json({ employee: serializeEmployee(await service.deactivate(authOf(req).companyId, id)) });
   });
 
-  router.post("/:id/restore", async (req, res) => {
+  router.post("/:id/reactivate", async (req, res) => {
     const { id } = parse(IdParamsSchema, req.params);
-    res.json({ employee: serializeEmployee(await service.restore(authOf(req).companyId, id)) });
+    res.json({ employee: serializeEmployee(await service.reactivate(authOf(req).companyId, id)) });
   });
 
   return router;

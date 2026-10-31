@@ -210,7 +210,7 @@ export class FakeStellar implements StellarGateway {
         if (a?.usdc) a.usdc.balance = value;
       }
     }
-    this.txs.set(hash, { successful: ok, ledger: this.ledger, closedAt: this.ledgerTime, resultXdr: resultXdr(ok, opCodes) });
+    this.txs.set(hash, { successful: ok, ledger: this.ledger, closedAt: this.ledgerTime, envelopeXdr: signedXdr, resultXdr: resultXdr(ok, opCodes) });
     return ok ? { kind: "success", ledger: this.ledger, closedAt: this.ledgerTime } : { kind: "failed", txCode: "tx_failed", opCodes };
   }
 }

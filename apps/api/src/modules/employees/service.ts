@@ -33,10 +33,10 @@ export function serializeEmployee(e: EmployeeRow): EmployeeDto {
     email: e.email,
     role: e.role,
     walletAddress: e.walletAddress,
-    defaultAmount: formatStroops(e.defaultAmountStroops),
-    defaultAmountStroops: e.defaultAmountStroops.toString(),
+    salary: formatStroops(e.salaryStroops),
+    salaryStroops: e.salaryStroops.toString(),
     group: e.group,
-    archived: e.archivedAt !== null,
+    active: e.deactivatedAt === null,
     check: { status: e.checkedAt === null ? "unchecked" : reason ? "problem" : "ready", reason, checkedAt: e.checkedAt?.toISOString() ?? null },
     createdAt: e.createdAt.toISOString(),
     updatedAt: e.updatedAt.toISOString(),
@@ -85,7 +85,7 @@ export function createEmployeeService(deps: AppDeps) {
   /** One active employee per wallet per company (E2). Run under the company's advisory lock. */
   async function assertWalletFree(db: Db, companyId: string, walletAddress: string, exceptId?: string): Promise<void> {
     const other = await db.employee.findFirst({
-      where: { companyId, walletAddress, archivedAt: null, ...(exceptId ? { id: { not: exceptId } } : {}) },
+      where: { companyId, walletAddress, deactivatedAt: null, ...(exceptId ? { id: { not: exceptId } } : {}) },
       select: { id: true },
     });
     if (other) throw walletInUse();
@@ -102,7 +102,7 @@ export function createEmployeeService(deps: AppDeps) {
     const checkedAt = new Date();
     for (const r of rows) {
       const account = accounts.get(r.walletAddress) ?? { exists: false as const };
-      const problem = receiveProblem(account, asset, r.defaultAmountStroops);
+      const problem = receiveProblem(account, asset, r.salaryStroops);
       await prisma.employee.updateMany({ where: { id: r.id, companyId }, data: { checkReason: problem, checkedAt } });
     }
   }
@@ -111,7 +111,7 @@ export function createEmployeeService(deps: AppDeps) {
     getOwned,
 
     async list(companyId: string, q: EmployeeListQuery) {
-      const where: Prisma.EmployeeWhereInput = { companyId, archivedAt: q.status === "archived" ? { not: null } : null };
+      const where: Prisma.EmployeeWhereInput = { companyId, deactivatedAt: q.status === "inactive" ? { not: null } : null };
       if (q.groupId === "none") where.groupId = null;
       else if (q.groupId) where.groupId = q.groupId;
       if (q.q) {
@@ -142,7 +142,7 @@ export function createEmployeeService(deps: AppDeps) {
 
     async create(companyId: string, input: CreateEmployeeBody): Promise<EmployeeRow> {
       assertWalletAddress(input.walletAddress);
-      const amount = amountOf(input.defaultAmount);
+      const amount = amountOf(input.salary);
       const created = await prisma.$transaction(async (tx) => {
         await lockCompanyPeople(tx, companyId);
         await assertGroup(tx, companyId, input.groupId);
@@ -154,7 +154,7 @@ export function createEmployeeService(deps: AppDeps) {
             email: input.email ?? null,
             role: input.role ?? null,
             walletAddress: input.walletAddress,
-            defaultAmountStroops: amount,
+            salaryStroops: amount,
             groupId: input.groupId ?? null,
           },
         });
@@ -166,16 +166,16 @@ export function createEmployeeService(deps: AppDeps) {
 
     async update(companyId: string, id: string, input: UpdateEmployeeBody): Promise<EmployeeRow> {
       if (input.walletAddress !== undefined) assertWalletAddress(input.walletAddress);
-      const amount = input.defaultAmount !== undefined ? amountOf(input.defaultAmount) : undefined;
+      const amount = input.salary !== undefined ? amountOf(input.salary) : undefined;
       const outside = await getOwned(companyId, id);
       const walletChanged = input.walletAddress !== undefined && input.walletAddress !== outside.walletAddress;
       await prisma.$transaction(async (tx) => {
         await lockCompanyPeople(tx, companyId);
-        // Re-read under the lock: a restore or another edit may have changed it meanwhile.
+        // Re-read under the lock: a reactivation or another edit may have changed it meanwhile.
         const before = await tx.employee.findFirst({ where: { id, companyId } });
         if (!before) throw notFound("Person");
         await assertGroup(tx, companyId, input.groupId);
-        if (input.walletAddress && input.walletAddress !== before.walletAddress && before.archivedAt === null) {
+        if (input.walletAddress && input.walletAddress !== before.walletAddress && before.deactivatedAt === null) {
           await assertWalletFree(tx, companyId, input.walletAddress, id);
         }
         await tx.employee.updateMany({
@@ -185,7 +185,7 @@ export function createEmployeeService(deps: AppDeps) {
             email: input.email,
             role: input.role,
             walletAddress: input.walletAddress,
-            defaultAmountStroops: amount,
+            salaryStroops: amount,
             groupId: input.groupId,
             // A new wallet (or amount, which changes trustline headroom) needs a new check.
             ...(walletChanged || amount !== undefined ? { checkReason: null, checkedAt: null } : {}),
@@ -197,21 +197,21 @@ export function createEmployeeService(deps: AppDeps) {
       return getOwned(companyId, id);
     },
 
-    /** Archived people are left out of new runs and keep their history on old ones (E4). */
-    async archive(companyId: string, id: string): Promise<EmployeeRow> {
+    /** Deactivated employees are left out of new runs and keep their history on old ones (E4). */
+    async deactivate(companyId: string, id: string): Promise<EmployeeRow> {
       await getOwned(companyId, id);
-      await prisma.employee.updateMany({ where: { id, companyId, archivedAt: null }, data: { archivedAt: new Date() } });
+      await prisma.employee.updateMany({ where: { id, companyId, deactivatedAt: null }, data: { deactivatedAt: new Date() } });
       return getOwned(companyId, id);
     },
 
-    async restore(companyId: string, id: string): Promise<EmployeeRow> {
+    async reactivate(companyId: string, id: string): Promise<EmployeeRow> {
       await getOwned(companyId, id);
       await prisma.$transaction(async (tx) => {
         await lockCompanyPeople(tx, companyId);
         const e = await tx.employee.findFirst({ where: { id, companyId } });
         if (!e) throw notFound("Person");
         await assertWalletFree(tx, companyId, e.walletAddress, id);
-        await tx.employee.updateMany({ where: { id, companyId }, data: { archivedAt: null } });
+        await tx.employee.updateMany({ where: { id, companyId }, data: { deactivatedAt: null } });
       });
       return getOwned(companyId, id);
     },
@@ -219,7 +219,7 @@ export function createEmployeeService(deps: AppDeps) {
     /** Re-checks the given people (or the 200 checked longest ago) against Stellar, fresh. */
     async check(companyId: string, ids?: string[]): Promise<EmployeeRow[]> {
       const rows = await prisma.employee.findMany({
-        where: { companyId, archivedAt: null, ...(ids ? { id: { in: ids } } : {}) },
+        where: { companyId, deactivatedAt: null, ...(ids ? { id: { in: ids } } : {}) },
         orderBy: [{ checkedAt: { sort: "asc", nulls: "first" } }, { id: "asc" }],
         take: 200,
       });
@@ -248,7 +248,7 @@ export function createEmployeeService(deps: AppDeps) {
         async (tx) => {
           await lockCompanyPeople(tx, companyId);
           const taken = await tx.employee.findMany({
-            where: { companyId, archivedAt: null, walletAddress: { in: input.employees.map((e) => e.walletAddress) } },
+            where: { companyId, deactivatedAt: null, walletAddress: { in: input.employees.map((e) => e.walletAddress) } },
             select: { walletAddress: true },
           });
           const takenSet = new Set(taken.map((t) => t.walletAddress));
@@ -270,7 +270,7 @@ export function createEmployeeService(deps: AppDeps) {
               email: e.email ?? null,
               role: e.role ?? null,
               walletAddress: e.walletAddress,
-              defaultAmountStroops: amountOf(e.defaultAmount),
+              salaryStroops: amountOf(e.salary),
               groupId: e.group ? (groupIds.get(e.group) ?? null) : null,
             })),
           });

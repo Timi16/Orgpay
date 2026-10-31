@@ -21,7 +21,7 @@ export interface NotifierDeps {
 export async function notifyRuns(deps: NotifierDeps, limit = 25): Promise<number> {
   const { prisma, mailer, webOrigin, logger } = deps;
   const runs = await prisma.payrollRun.findMany({
-    where: { status: { in: ["PAID", "PARTIAL", "FAILED"] }, notifiedAt: null, finishedAt: { gt: new Date(Date.now() - MAX_AGE_MS) } },
+    where: { status: { in: ["COMPLETED", "PARTIALLY_PAID", "FAILED"] }, notifiedAt: null, finishedAt: { gt: new Date(Date.now() - MAX_AGE_MS) } },
     include: { company: true },
     orderBy: { finishedAt: "asc" },
     take: limit,
@@ -36,14 +36,14 @@ export async function notifyRuns(deps: NotifierDeps, limit = 25): Promise<number
     if (claimed.count === 0) continue;
     const company = run.company;
     if (company.closedAt) continue;
-    const wanted = run.status === "PAID" ? company.notifyPaid : company.notifyProblems;
+    const wanted = run.status === "COMPLETED" ? company.notifyPaid : company.notifyProblems;
     if (!wanted) continue;
     const items = await prisma.payrollItem.findMany({
-      where: { runId: run.id, status: { in: ["PAID", "FAILED"] } },
+      where: { runId: run.id, status: { in: ["SUCCESSFUL", "FAILED"] } },
       select: { status: true, amountStroops: true, name: true, failureCode: true },
       orderBy: { position: "asc" },
     });
-    const paid = items.filter((i) => i.status === "PAID");
+    const paid = items.filter((i) => i.status === "SUCCESSFUL");
     try {
       await mailer.send(
         runFinishedEmail(
@@ -53,7 +53,7 @@ export async function notifyRuns(deps: NotifierDeps, limit = 25): Promise<number
             id: run.id,
             number: run.number,
             name: run.name,
-            status: run.status as "PAID" | "PARTIAL" | "FAILED",
+            status: run.status as "COMPLETED" | "PARTIALLY_PAID" | "FAILED",
             assetCode: run.assetCode,
             paidCount: paid.length,
             paidStroops: paid.reduce((s, i) => s + i.amountStroops, 0n),

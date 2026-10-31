@@ -29,7 +29,7 @@ export const CreateEmployeeBody = z
     email: Email.nullable().optional(),
     role: Role.nullable().optional(),
     walletAddress: WalletAddress,
-    defaultAmount: AmountSchema,
+    salary: AmountSchema,
     groupId: IdSchema.nullable().optional(),
   })
   .strict();
@@ -41,7 +41,7 @@ export const UpdateEmployeeBody = z
     email: Email.nullable(),
     role: Role.nullable(),
     walletAddress: WalletAddress,
-    defaultAmount: AmountSchema,
+    salary: AmountSchema,
     groupId: IdSchema.nullable(),
   })
   .partial()
@@ -60,7 +60,7 @@ export const ImportEmployeesBody = z
             email: Email.nullable().optional(),
             role: Role.nullable().optional(),
             walletAddress: WalletAddress,
-            defaultAmount: AmountSchema,
+            salary: AmountSchema,
             group: SafeText(1, 50).nullable().optional(),
           })
           .strict(),
@@ -78,7 +78,7 @@ export const EmployeeListQuery = z
     q: z.string().trim().max(100).optional(),
     /** A group id, or "none" for people in no group. */
     groupId: z.union([IdSchema, z.literal("none")]).optional(),
-    status: z.enum(["active", "archived"]).default("active"),
+    status: z.enum(["active", "inactive"]).default("active"),
     // Larger pages than other lists: the run builder shows everyone at once.
     limit: z.coerce.number().int().min(1).max(500).default(100),
     cursor: PaginationQuery.cursor,
@@ -100,10 +100,10 @@ export const EmployeeSchema = z.object({
   email: z.string().nullable(),
   role: z.string().nullable(),
   walletAddress: z.string(),
-  defaultAmount: z.string(),
-  defaultAmountStroops: z.string(),
+  salary: z.string(),
+  salaryStroops: z.string(),
   group: z.object({ id: z.string(), name: z.string() }).nullable(),
-  archived: z.boolean(),
+  active: z.boolean(),
   check: RecipientCheckSchema,
   createdAt: z.string(),
   updatedAt: z.string(),

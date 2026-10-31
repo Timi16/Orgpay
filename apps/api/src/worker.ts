@@ -5,6 +5,7 @@ import { CONFIRM_INTERVAL_MS, confirmOpenBatches } from "./engine/confirmer";
 import { NOTIFY_INTERVAL_MS, notifyRuns } from "./engine/notifier";
 import { logger } from "./lib/logger";
 import { createMailer } from "./lib/mailer";
+import { pruneIdempotencyKeys } from "./middleware/idempotency";
 import { pruneCounters } from "./modules/auth/throttle";
 import { createPayrollService } from "./modules/payroll/service";
 import { HorizonGateway } from "./stellar/horizonGateway";
@@ -73,7 +74,7 @@ async function main(): Promise<void> {
     ...(mailer
       ? [loop("notifier", async () => (await notifyRuns({ prisma, mailer, webOrigin: env.WEB_ORIGIN, logger }), NOTIFY_INTERVAL_MS), false)]
       : []),
-    loop("housekeeping", async () => (await pruneCounters(prisma), 10 * 60_000), false),
+    loop("housekeeping", async () => (await pruneCounters(prisma), await pruneIdempotencyKeys(prisma), 10 * 60_000), false),
   ]);
 
   await prisma.$disconnect();

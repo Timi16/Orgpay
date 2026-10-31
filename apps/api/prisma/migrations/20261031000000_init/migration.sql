@@ -2,10 +2,10 @@
 CREATE SCHEMA IF NOT EXISTS "public";
 
 -- CreateEnum
-CREATE TYPE "RunStatus" AS ENUM ('DRAFT', 'PAYING', 'PAID', 'PARTIAL', 'FAILED', 'CANCELLED');
+CREATE TYPE "RunStatus" AS ENUM ('DRAFT', 'PROCESSING', 'COMPLETED', 'PARTIALLY_PAID', 'FAILED', 'CANCELLED');
 
 -- CreateEnum
-CREATE TYPE "ItemStatus" AS ENUM ('PENDING', 'SENDING', 'PAID', 'FAILED', 'CANCELLED');
+CREATE TYPE "ItemStatus" AS ENUM ('PENDING', 'AWAITING_SIGNATURE', 'SUBMITTED', 'SUCCESSFUL', 'FAILED', 'CANCELLED');
 
 -- CreateEnum
 CREATE TYPE "BatchStatus" AS ENUM ('AWAITING_SIGNATURE', 'SUBMITTED', 'CONFIRMED', 'FAILED', 'EXPIRED');
@@ -152,9 +152,9 @@ CREATE TABLE "Employee" (
     "email" TEXT,
     "role" TEXT,
     "walletAddress" TEXT NOT NULL,
-    "defaultAmountStroops" BIGINT NOT NULL,
+    "salaryStroops" BIGINT NOT NULL,
     "groupId" TEXT,
-    "archivedAt" TIMESTAMP(3),
+    "deactivatedAt" TIMESTAMP(3),
     "checkReason" TEXT,
     "checkedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -174,6 +174,7 @@ CREATE TABLE "PayrollRun" (
     "walletAddress" TEXT NOT NULL,
     "assetCode" TEXT NOT NULL,
     "assetIssuer" TEXT NOT NULL,
+    "paymentsPerTx" INTEGER NOT NULL DEFAULT 1,
     "status" "RunStatus" NOT NULL DEFAULT 'DRAFT',
     "startedAt" TIMESTAMP(3),
     "finishedAt" TIMESTAMP(3),
@@ -203,6 +204,7 @@ CREATE TABLE "PayrollItem" (
     "txHash" TEXT,
     "ledger" INTEGER,
     "paidAt" TIMESTAMP(3),
+    "verifiedAt" TIMESTAMP(3),
     "attempts" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -245,6 +247,21 @@ CREATE TABLE "PayrollEvent" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "PayrollEvent_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "IdempotencyKey" (
+    "companyId" TEXT NOT NULL,
+    "key" TEXT NOT NULL,
+    "route" TEXT NOT NULL,
+    "requestHash" TEXT NOT NULL,
+    "state" TEXT NOT NULL,
+    "responseStatus" INTEGER,
+    "responseBody" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "IdempotencyKey_pkey" PRIMARY KEY ("companyId","key")
 );
 
 -- CreateIndex
@@ -318,6 +335,9 @@ CREATE UNIQUE INDEX "PayrollBatch_runId_number_key" ON "PayrollBatch"("runId", "
 
 -- CreateIndex
 CREATE INDEX "PayrollEvent_runId_createdAt_idx" ON "PayrollEvent"("runId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "IdempotencyKey_expiresAt_idx" ON "IdempotencyKey"("expiresAt");
 
 -- AddForeignKey
 ALTER TABLE "Session" ADD CONSTRAINT "Session_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE CASCADE ON UPDATE CASCADE;

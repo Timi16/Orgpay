@@ -1,4 +1,5 @@
-import type { Employee, Run, SignableBatch, Wallet as WalletDto } from "@orgpay/shared";
+import { randomUUID } from "node:crypto";
+import type { Employee, Run, SignableTransaction, Wallet as WalletDto } from "@orgpay/shared";
 import { Keypair, TransactionBuilder } from "@stellar/stellar-sdk";
 import pino from "pino";
 import request from "supertest";
@@ -92,17 +93,21 @@ export async function addFundingWallet(t: TestApp, c: TestCompany, usdc = "10000
   return { id: wallet.id, address: wallet.address, keypair };
 }
 
-export async function addEmployee(c: TestCompany, body: Partial<{ name: string; walletAddress: string; defaultAmount: string; groupId: string | null; email: string }> = {}): Promise<Employee> {
+export async function addEmployee(c: TestCompany, body: Partial<{ name: string; walletAddress: string; salary: string; groupId: string | null; email: string }> = {}): Promise<Employee> {
   const res = await c.agent
     .post("/v1/employees")
     .set("Origin", ORIGIN)
-    .send({ name: `Person ${++counter}`, walletAddress: Keypair.random().publicKey(), defaultAmount: "1000", ...body });
+    .send({ name: `Person ${++counter}`, walletAddress: Keypair.random().publicKey(), salary: "1000", ...body });
   if (res.status !== 201) throw new Error(`add employee failed: ${res.status} ${JSON.stringify(res.body)}`);
   return (res.body as { employee: Employee }).employee;
 }
 
 export async function createRun(c: TestCompany, wallet: TestWallet, body: Record<string, unknown>): Promise<Run> {
-  const res = await c.agent.post("/v1/payroll-runs").set("Origin", ORIGIN).send({ name: "October payroll", walletId: wallet.id, ...body });
+  const res = await c.agent
+    .post("/v1/payroll-runs")
+    .set("Origin", ORIGIN)
+    .set("Idempotency-Key", randomUUID())
+    .send({ name: "October payroll", walletId: wallet.id, ...body });
   if (res.status !== 201) throw new Error(`create run failed: ${res.status} ${JSON.stringify(res.body)}`);
   return (res.body as { run: Run }).run;
 }
@@ -112,7 +117,7 @@ export async function setupPayroll(t: TestApp, n = 3, amount = "1000") {
   const company = await signup(t);
   const wallet = await addFundingWallet(t, company);
   const people: Employee[] = [];
-  for (let i = 0; i < n; i++) people.push(await addEmployee(company, { defaultAmount: amount }));
+  for (let i = 0; i < n; i++) people.push(await addEmployee(company, { salary: amount }));
   return { company, wallet, people };
 }
 
@@ -120,7 +125,15 @@ export function post(c: TestCompany, path: string, body: unknown = {}) {
   return c.agent.post(path).set("Origin", ORIGIN).send(body as object);
 }
 
-/** Signs a batch envelope as Freighter would. */
+/** A POST that is one user action: a fresh Idempotency-Key, unless the test repeats one on purpose. */
+export function postOnce(c: TestCompany, path: string, body: unknown = {}, key: string = randomUUID()) {
+  return c.agent.post(path).set("Origin", ORIGIN).set("Idempotency-Key", key).send(body as object);
+}
+
+/** The transaction to sign, as the tests call it: a batch of `paymentsPerTx` payments. */
+export type SignableBatch = SignableTransaction;
+
+/** Signs a transaction envelope as Freighter would. */
 export function sign(batch: SignableBatch, keypair: Keypair): string {
   const tx = TransactionBuilder.fromXDR(batch.xdr, PASSPHRASE);
   tx.sign(keypair);
@@ -128,26 +141,27 @@ export function sign(batch: SignableBatch, keypair: Keypair): string {
 }
 
 export async function nextBatch(c: TestCompany, runId: string): Promise<{ batch: SignableBatch | null; run: Run }> {
-  const res = await post(c, `/v1/payroll-runs/${runId}/batches/next`);
-  if (res.status !== 200) throw new Error(`next batch failed: ${res.status} ${JSON.stringify(res.body)}`);
-  return res.body as { batch: SignableBatch | null; run: Run };
+  const res = await post(c, `/v1/payroll-runs/${runId}/transactions/next`);
+  if (res.status !== 200) throw new Error(`next transaction failed: ${res.status} ${JSON.stringify(res.body)}`);
+  const body = res.body as { transaction: SignableBatch | null; run: Run };
+  return { batch: body.transaction, run: body.run };
 }
 
 export async function submit(c: TestCompany, runId: string, batch: SignableBatch, signedXdr: string) {
-  return post(c, `/v1/payroll-runs/${runId}/batches/${batch.id}/submit`, { signedXdr });
+  return post(c, `/v1/payroll-runs/${runId}/transactions/${batch.id}/submit`, { signedXdr });
 }
 
-/** Start, then sign and submit every batch until there is nothing left to sign. */
+/** Execute, then sign and submit every transaction until there is nothing left to sign. */
 export async function payAll(c: TestCompany, runId: string, wallet: TestWallet): Promise<Run> {
   const started = await post(c, `/v1/payroll-runs/${runId}/start`);
   if (started.status !== 200) throw new Error(`start failed: ${started.status} ${JSON.stringify(started.body)}`);
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 50; i++) {
     const { batch, run } = await nextBatch(c, runId);
     if (!batch) return run;
     const res = await submit(c, runId, batch, sign(batch, wallet.keypair));
     if (res.status !== 200) throw new Error(`submit failed: ${res.status} ${JSON.stringify(res.body)}`);
   }
-  throw new Error("too many batches");
+  throw new Error("too many transactions");
 }
 
 export async function getRun(c: TestCompany, runId: string): Promise<Run> {

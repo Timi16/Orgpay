@@ -124,13 +124,19 @@ export class HorizonGateway implements StellarGateway {
   }
 
   async getTransaction(hash: string): Promise<TransactionLookup> {
-    const { body, nodeLedger } = await this.getJson<{ successful?: boolean; ledger?: number; created_at?: string; result_xdr?: string }>(
+    const { body, nodeLedger } = await this.getJson<{ successful?: boolean; ledger?: number; created_at?: string; envelope_xdr?: string; result_xdr?: string }>(
       `/transactions/${encodeURIComponent(hash)}`,
     );
     if (!body) return { found: null, nodeLedger };
-    if (typeof body.ledger !== "number" || !body.created_at || !body.result_xdr) throw unavailable();
+    if (typeof body.ledger !== "number" || !body.created_at || !body.envelope_xdr || !body.result_xdr) throw unavailable();
     return {
-      found: { successful: body.successful === true, ledger: body.ledger, closedAt: new Date(body.created_at), resultXdr: body.result_xdr },
+      found: {
+        successful: body.successful === true,
+        ledger: body.ledger,
+        closedAt: new Date(body.created_at),
+        envelopeXdr: body.envelope_xdr,
+        resultXdr: body.result_xdr,
+      },
       nodeLedger,
     };
   }

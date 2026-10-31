@@ -28,6 +28,7 @@ const ERROR_DESCRIPTIONS: Record<number, string> = {
   403: "CSRF check failed",
   404: "Missing, or belongs to another company",
   409: "Conflict with the current state",
+  422: "Idempotency-Key already used for a different request",
   429: "Rate limited (see Retry-After)",
   503: "Dependency unavailable",
 };
@@ -131,27 +132,33 @@ export function buildOpenApiDocument(serverUrl?: string) {
   add({ method: "post", path: "/v1/employees/check", summary: "Re-check wallets", description: "Fresh Stellar check of the given people (or the 200 checked longest ago).", tag: "People", auth: "any", body: s.CheckEmployeesBody, success: { 200: z.object({ data: z.array(s.EmployeeSchema) }) }, errors: [400, 403, 503] });
   add({ method: "get", path: "/v1/employees/{id}", summary: "Get a person", tag: "People", auth: "any", params: s.IdParamsSchema, success: { 200: s.EmployeeResponse }, errors: [404] });
   add({ method: "patch", path: "/v1/employees/{id}", summary: "Update a person", tag: "People", auth: "any", params: s.IdParamsSchema, body: s.UpdateEmployeeBody, success: { 200: s.EmployeeResponse }, errors: [400, 403, 404, 409] });
-  add({ method: "post", path: "/v1/employees/{id}/archive", summary: "Archive a person", description: "Left out of new runs; kept on old ones.", tag: "People", auth: "any", params: s.IdParamsSchema, success: { 200: s.EmployeeResponse }, errors: [403, 404] });
-  add({ method: "post", path: "/v1/employees/{id}/restore", summary: "Restore an archived person", tag: "People", auth: "any", params: s.IdParamsSchema, success: { 200: s.EmployeeResponse }, errors: [403, 404, 409] });
+  add({ method: "post", path: "/v1/employees/{id}/deactivate", summary: "Deactivate an employee", description: "Left out of new runs; kept on old ones.", tag: "People", auth: "any", params: s.IdParamsSchema, success: { 200: s.EmployeeResponse }, errors: [403, 404] });
+  add({ method: "post", path: "/v1/employees/{id}/reactivate", summary: "Reactivate an employee", tag: "People", auth: "any", params: s.IdParamsSchema, success: { 200: s.EmployeeResponse }, errors: [403, 404, 409] });
 
   // Payroll runs
+  const idempotencyKey = z.object({ "Idempotency-Key": z.string().min(8).max(255).openapi({ description: "A new random value per action. Repeating the request with the same key returns the first response instead of creating another run." }) });
   add({ method: "get", path: "/v1/payroll-runs", summary: "List payroll runs", tag: "Payroll", auth: "any", query: s.RunListQuery, success: { 200: s.RunListResponse }, errors: [400] });
-  add({ method: "post", path: "/v1/payroll-runs", summary: "Create a draft run", description: "One line per active person in the groups and people given, at their default amount.", tag: "Payroll", auth: "any", body: s.CreateRunBody, success: { 201: s.RunResponse }, errors: [400, 403, 404, 409] });
-  add({ method: "get", path: "/v1/payroll-runs/{id}", summary: "Get a run", description: "Every line with its status, failure reason and transaction hash; the batches; the history.", tag: "Payroll", auth: "any", params: s.IdParamsSchema, success: { 200: s.RunResponse }, errors: [404] });
-  add({ method: "patch", path: "/v1/payroll-runs/{id}", summary: "Rename, re-date or change the funding wallet (draft)", tag: "Payroll", auth: "any", params: s.IdParamsSchema, body: s.UpdateRunBody, success: { 200: s.RunResponse }, errors: [400, 403, 404, 409] });
+  add({ method: "post", path: "/v1/payroll-runs", summary: "Create a draft run", description: "One payment per active employee given (directly or through a group), at their salary. Needs an `Idempotency-Key` header.", tag: "Payroll", auth: "any", headers: idempotencyKey, body: s.CreateRunBody, success: { 201: s.RunResponse }, errors: [400, 403, 404, 409, 422] });
+  add({ method: "get", path: "/v1/payroll-runs/{id}", summary: "Get a run", description: "Every payment with its status, failure reason, transaction hash and explorer link; the Stellar transactions; the history.", tag: "Payroll", auth: "any", params: s.IdParamsSchema, success: { 200: s.RunResponse }, errors: [404] });
+  add({ method: "patch", path: "/v1/payroll-runs/{id}", summary: "Rename, re-date, change the funding wallet or payments per transaction (draft)", tag: "Payroll", auth: "any", params: s.IdParamsSchema, body: s.UpdateRunBody, success: { 200: s.RunResponse }, errors: [400, 403, 404, 409] });
   add({ method: "delete", path: "/v1/payroll-runs/{id}", summary: "Delete a draft", tag: "Payroll", auth: "any", params: s.IdParamsSchema, success: { 204: null }, errors: [403, 404, 409] });
-  add({ method: "post", path: "/v1/payroll-runs/{id}/items", summary: "Add people or groups (draft)", tag: "Payroll", auth: "any", params: s.IdParamsSchema, body: s.AddItemsBody, success: { 200: s.RunResponse }, errors: [400, 403, 404, 409] });
-  add({ method: "patch", path: "/v1/payroll-runs/{id}/items/{itemId}", summary: "Change a line's amount (draft)", tag: "Payroll", auth: "any", params: s.RunItemParams, body: s.UpdateItemBody, success: { 200: s.RunResponse }, errors: [400, 403, 404, 409] });
-  add({ method: "delete", path: "/v1/payroll-runs/{id}/items/{itemId}", summary: "Remove a line (draft)", tag: "Payroll", auth: "any", params: s.RunItemParams, success: { 200: s.RunResponse }, errors: [403, 404, 409] });
-  add({ method: "get", path: "/v1/payroll-runs/{id}/check", summary: "Pre-flight check", description: "Read-only. Who can receive USDC right now, and whether the funding wallet covers the rest plus fees.", tag: "Payroll", auth: "any", params: s.IdParamsSchema, success: { 200: s.RunCheckResponse }, errors: [404, 503] });
-  add({ method: "post", path: "/v1/payroll-runs/{id}/start", summary: "Start paying", description: "Checks everyone fresh. People who can't receive are marked failed and never sent anything; if the funding wallet can't cover the rest, nothing changes (400 INSUFFICIENT_FUNDS).", tag: "Payroll", auth: "any", params: s.IdParamsSchema, success: { 200: s.RunResponse }, errors: [400, 403, 404, 409, 503] });
-  add({ method: "post", path: "/v1/payroll-runs/{id}/batches/next", summary: "Get the next batch to sign", description: "Up to 100 payments in one unsigned transaction (base64 XDR) from the funding wallet, valid for a few minutes. While a batch is open the same one is returned. `batch: null` means nothing to sign right now.", tag: "Payroll", auth: "any", params: s.IdParamsSchema, success: { 200: s.NextBatchResponse }, errors: [400, 403, 404, 409, 503] });
-  add({ method: "post", path: "/v1/payroll-runs/{id}/batches/{batchId}/submit", summary: "Submit a signed batch", description: "The signed transaction must be exactly the one OrgPay built (400 TX_MISMATCH otherwise). 200 when Stellar gave a final answer, 202 when it is still pending (the worker settles it).", tag: "Payroll", auth: "any", params: s.RunBatchParams, body: s.SubmitBatchBody, success: { 200: s.SubmitBatchResponse, 202: s.SubmitBatchResponse }, errors: [400, 403, 404, 409] });
-  add({ method: "post", path: "/v1/payroll-runs/{id}/retry", summary: "Retry failed payments", description: "Failed lines that now pass a fresh check go back in the queue; a paid line is never sent again.", tag: "Payroll", auth: "any", params: s.IdParamsSchema, body: s.RetryBody, success: { 200: s.RunResponse }, errors: [400, 403, 404, 409, 503] });
-  add({ method: "post", path: "/v1/payroll-runs/{id}/cancel", summary: "Cancel", description: "A draft, or the unsent payments of a run being paid (not while a batch is open).", tag: "Payroll", auth: "any", params: s.IdParamsSchema, success: { 200: s.RunResponse }, errors: [403, 404, 409] });
+  add({ method: "get", path: "/v1/payroll-runs/{id}/export.csv", summary: "Export payments as CSV", description: "Every payment with its status, hash and explorer link.", tag: "Payroll", auth: "any", params: s.IdParamsSchema, success: { 200: z.string() }, errors: [404] });
+  add({ method: "post", path: "/v1/payroll-runs/{id}/payments", summary: "Add employees or groups (draft)", tag: "Payroll", auth: "any", params: s.IdParamsSchema, body: s.AddPaymentsBody, success: { 200: s.RunResponse }, errors: [400, 403, 404, 409] });
+  add({ method: "patch", path: "/v1/payroll-runs/{id}/payments/{paymentId}", summary: "Change a payment's amount (draft)", tag: "Payroll", auth: "any", params: s.RunPaymentParams, body: s.UpdatePaymentBody, success: { 200: s.RunResponse }, errors: [400, 403, 404, 409] });
+  add({ method: "delete", path: "/v1/payroll-runs/{id}/payments/{paymentId}", summary: "Remove a payment (draft)", tag: "Payroll", auth: "any", params: s.RunPaymentParams, success: { 200: s.RunResponse }, errors: [403, 404, 409] });
+  add({ method: "get", path: "/v1/payroll-runs/{id}/check", summary: "Review before executing", description: "Read-only. Who can receive USDC right now, whether the funding wallet covers the rest plus fees, and employees already paid by another run with the same pay date.", tag: "Payroll", auth: "any", params: s.IdParamsSchema, success: { 200: s.RunCheckResponse }, errors: [404, 503] });
+  add({ method: "post", path: "/v1/payroll-runs/{id}/start", summary: "Execute the run", description: "Checks everyone fresh. Employees who can't receive are marked failed and never sent anything; if the funding wallet can't cover the rest, nothing changes (400 INSUFFICIENT_FUNDS). A run can be executed once (409 after that).", tag: "Payroll", auth: "any", params: s.IdParamsSchema, success: { 200: s.RunResponse }, errors: [400, 403, 404, 409, 503] });
+  add({ method: "post", path: "/v1/payroll-runs/{id}/transactions/next", summary: "Get the next transaction to sign", description: "The next `paymentsPerTx` payments (1 by default) in one unsigned transaction (base64 XDR) from the funding wallet, valid for a few minutes. While a transaction is open the same one is returned. `transaction: null` means nothing to sign right now.", tag: "Payroll", auth: "any", params: s.IdParamsSchema, success: { 200: s.NextTransactionResponse }, errors: [400, 403, 404, 409, 503] });
+  add({ method: "post", path: "/v1/payroll-runs/{id}/transactions/{txId}/submit", summary: "Submit a signed transaction", description: "The signed transaction must be exactly the one OrgPay built (400 TX_MISMATCH otherwise). Payments become successful only once the ledger record is verified against them. 200 when Stellar gave a final answer, 202 when it is still pending (the worker settles it). Submitting the same transaction again never sends it twice.", tag: "Payroll", auth: "any", params: s.RunTransactionParams, body: s.SubmitTransactionBody, success: { 200: s.SubmitTransactionResponse, 202: s.SubmitTransactionResponse }, errors: [400, 403, 404, 409] });
+  add({ method: "post", path: "/v1/payroll-runs/{id}/retry", summary: "Retry failed payments", description: "Failed payments that now pass a fresh check go back in the queue; a successful payment is never sent again.", tag: "Payroll", auth: "any", params: s.IdParamsSchema, body: s.RetryBody, success: { 200: s.RunResponse }, errors: [400, 403, 404, 409, 503] });
+  add({ method: "post", path: "/v1/payroll-runs/{id}/cancel", summary: "Cancel", description: "A draft, or the unsent payments of a run being paid (not while a transaction is open).", tag: "Payroll", auth: "any", params: s.IdParamsSchema, success: { 200: s.RunResponse }, errors: [403, 404, 409] });
+
+  // Payments
+  add({ method: "get", path: "/v1/payments/{id}", summary: "Get a payment", description: "One payment with its run.", tag: "Payroll", auth: "any", params: s.IdParamsSchema, success: { 200: s.PaymentResponse }, errors: [404] });
+  add({ method: "get", path: "/v1/payments/{id}/verify", summary: "Verify a payment on Stellar", description: "Reads the transaction straight from Horizon and checks it against the payment: successful, the hash OrgPay built, from the funding wallet, to this wallet, this asset and amount, op_success. Read-only.", tag: "Payroll", auth: "any", params: s.IdParamsSchema, success: { 200: s.PaymentVerificationResponse }, errors: [404, 503] });
   add({ method: "get", path: "/v1/summary", summary: "Overview numbers", tag: "Payroll", auth: "any", success: { 200: s.SummarySchema } });
 
-  add({ method: "get", path: "/health", summary: "Health", description: "Database status and the number of batches still open.", tag: "System", auth: "public", success: { 200: schemas.Health }, errors: [503] });
+  add({ method: "get", path: "/health", summary: "Health", description: "Database status and the number of Stellar transactions still open.", tag: "System", auth: "public", success: { 200: schemas.Health }, errors: [503] });
 
   return new OpenApiGeneratorV3(registry.definitions).generateDocument({
     openapi: "3.0.3",
@@ -159,17 +166,18 @@ export function buildOpenApiDocument(serverUrl?: string) {
       title: "OrgPay API",
       version: "1.0.0",
       description: [
-        "Run payroll in USDC on **Stellar Testnet**: people, groups, runs, and every payment tracked to its transaction hash. No real money moves.",
+        "Run payroll in USDC on **Stellar Testnet**: employees, payroll runs, and every payment tracked to a verified transaction hash. No real money moves.",
         "",
-        "OrgPay never holds a secret key. It builds each batch as an unsigned transaction; you sign it with the funding wallet (Freighter in the dashboard, or your own signer) and send it back.",
+        "OrgPay never holds a secret key. It builds each transaction unsigned; you sign it with the funding wallet (Freighter in the dashboard, or your own signer) and send it back. A payment is marked successful only after its ledger record is checked against it.",
         "",
         "## Getting started",
         "1. In the dashboard, add your funding wallet and create an API key under **API keys** (shown once).",
         "2. Send it on every request: `Authorization: Bearer op_test_…`.",
-        "3. `POST /v1/employees` for each person, then `POST /v1/payroll-runs`.",
-        "4. `POST /start`, then loop: `POST /batches/next` → sign the XDR → `POST /batches/{batchId}/submit`, until `batch` is null.",
+        "3. `POST /v1/employees` for each employee, then `POST /v1/payroll-runs` with an `Idempotency-Key`.",
+        "4. `POST /start`, then loop: `POST /transactions/next` → sign the XDR → `POST /transactions/{txId}/submit`, until `transaction` is null.",
         "",
         "## Conventions",
+        "- **Idempotency**: any write may carry `Idempotency-Key`; a repeat with the same key and body replays the first response (`Idempotent-Replayed: true`). Creating a run requires one.",
         "- **Amounts** are decimal strings with up to 7 decimals (`\"1500\"`, `\"0.5\"`); responses also carry the exact value in stroops.",
         "- **Errors** share one shape: `{ error: { code, message, details, requestId } }`.",
         "- **Pagination**: lists take `limit` and `cursor` and return `{ data, nextCursor }`.",
@@ -177,8 +185,8 @@ export function buildOpenApiDocument(serverUrl?: string) {
       ].join("\n"),
     },
     tags: [
-      { name: "People", description: "Employees, their wallets and default amounts, and groups." },
-      { name: "Payroll", description: "Draft a run, check it, start it, sign each batch, and follow every payment." },
+      { name: "People", description: "Employees, their wallets and salaries, and groups." },
+      { name: "Payroll", description: "Draft a run, review it, execute it, sign each transaction, and follow every payment to its verified hash." },
       { name: "System" },
     ],
     servers: serverUrl ? [{ url: serverUrl }] : [],

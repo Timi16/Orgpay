@@ -39,5 +39,5 @@ export async function updateWallet(
 
 /** Runs still using the wallet: a draft that would pay from it, or a run being paid. */
 export function countOpenRuns(db: Db, companyId: string, walletId: string): Promise<number> {
-  return db.payrollRun.count({ where: { companyId, walletId, status: { in: ["DRAFT", "PAYING"] } } });
+  return db.payrollRun.count({ where: { companyId, walletId, status: { in: ["DRAFT", "PROCESSING"] } } });
 }

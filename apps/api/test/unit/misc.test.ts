@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { Keypair, Networks, TransactionBuilder, type Transaction } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
 import { EnvSchema, loadEnv } from "../../src/config/env";
-import { batchMemo, buildBatchTransaction, checkSignedBatch } from "../../src/modules/payroll/batches";
+import { buildBatchTransaction, checkSignedBatch, transactionMemo } from "../../src/modules/payroll/batches";
 import { lineFailure } from "../../src/modules/payroll/settle";
 import { BATCH_ALLOWED, ITEM_ALLOWED, RUN_ALLOWED } from "../../src/modules/payroll/transitions";
 import { decodeSignature, verifyWalletSignature } from "../../src/modules/wallets/signature";
@@ -91,20 +91,22 @@ describe("wallet address rules", () => {
 });
 
 describe("status tables", () => {
-  it("PAID and CANCELLED runs are final; PARTIAL and FAILED go back to PAYING (retry), and a FAILED run can be given up on", () => {
-    expect(RUN_ALLOWED.PAID).toEqual([]);
+  it("COMPLETED and CANCELLED runs are final; PARTIALLY_PAID and FAILED go back to PROCESSING (retry), and a FAILED run can be given up on", () => {
+    expect(RUN_ALLOWED.COMPLETED).toEqual([]);
     expect(RUN_ALLOWED.CANCELLED).toEqual([]);
-    expect(RUN_ALLOWED.PARTIAL).toEqual(["PAYING"]);
-    expect(RUN_ALLOWED.FAILED).toEqual(["PAYING", "CANCELLED"]);
-    expect(RUN_ALLOWED.DRAFT).toEqual(["PAYING", "CANCELLED"]);
+    expect(RUN_ALLOWED.PARTIALLY_PAID).toEqual(["PROCESSING"]);
+    expect(RUN_ALLOWED.FAILED).toEqual(["PROCESSING", "CANCELLED"]);
+    expect(RUN_ALLOWED.DRAFT).toEqual(["PROCESSING", "CANCELLED"]);
   });
 
-  it("R13: a PAID line never changes again; only FAILED lines can be retried (or given up on)", () => {
-    expect(ITEM_ALLOWED.PAID).toEqual([]);
+  it("R13: a SUCCESSFUL payment never changes again; only FAILED payments can be retried (or given up on)", () => {
+    expect(ITEM_ALLOWED.SUCCESSFUL).toEqual([]);
     expect(ITEM_ALLOWED.CANCELLED).toEqual([]);
     expect(ITEM_ALLOWED.FAILED).toEqual(["PENDING", "CANCELLED"]);
-    // Nothing goes straight from PENDING to PAID: a line is only paid through a batch.
-    expect(ITEM_ALLOWED.PENDING).not.toContain("PAID");
+    // Nothing goes straight from PENDING to SUCCESSFUL: a payment is only made through a transaction,
+    // and only a verified ledger record makes it SUCCESSFUL.
+    expect(ITEM_ALLOWED.PENDING).not.toContain("SUCCESSFUL");
+    expect(ITEM_ALLOWED.PENDING).not.toContain("SUBMITTED");
     for (const final of ["CONFIRMED", "FAILED", "EXPIRED"] as const) expect(BATCH_ALLOWED[final]).toEqual([]);
   });
 });
@@ -179,7 +181,7 @@ describe("batches", () => {
         { destination: Keypair.random().publicKey(), amountStroops: 1n },
         { destination: Keypair.random().publicKey(), amountStroops: 15_005_000_000n },
       ],
-      memo: batchMemo(12345),
+      memo: transactionMemo(12345, [1, 2], 3),
       maxTime: new Date("2026-10-16T12:05:00Z"),
     });
 
@@ -188,10 +190,12 @@ describe("batches", () => {
     const tx = TransactionBuilder.fromXDR(built.xdr, Networks.TESTNET) as Transaction;
     expect(built.sequence).toBe("42");
     expect(tx.operations.map((o) => (o.type === "payment" ? o.amount : null))).toEqual(["0.0000001", "1500.5000000"]);
-    expect(Buffer.from(tx.memo.value as Uint8Array).toString()).toBe("OrgPay payroll #12345");
+    expect(Buffer.from(tx.memo.value as Uint8Array).toString()).toBe("OrgPay R12345 T3");
     expect(tx.timeBounds?.maxTime).toBe(String(Date.parse("2026-10-16T12:05:00Z") / 1000));
     expect(Buffer.from(tx.hash()).toString("hex")).toBe(built.hash);
-    expect(Buffer.byteLength(batchMemo(999999999))).toBeLessThanOrEqual(28);
+    expect(transactionMemo(7, [4], 1)).toBe("OrgPay R7 P4");
+    expect(Buffer.byteLength(transactionMemo(999999999, [999999], 1))).toBeLessThanOrEqual(28);
+    expect(Buffer.byteLength(transactionMemo(999999999, [1, 2], 999999))).toBeLessThanOrEqual(28);
   });
 
   it("R7: a signed batch must be ours and signed by the funding wallet", () => {

@@ -34,6 +34,8 @@ export interface FoundTransaction {
   successful: boolean;
   ledger: number;
   closedAt: Date;
+  /** Base64 TransactionEnvelope XDR, as it landed: what verification reads the operations from. */
+  envelopeXdr: string;
   /** Base64 TransactionResult XDR. */
   resultXdr: string;
 }

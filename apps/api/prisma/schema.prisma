@@ -154,40 +154,43 @@ model Group {
 }
 
 model Employee {
-  id                   String        @id @default(cuid())
-  companyId            String
-  company              Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name                 String
-  email                String?
-  role                 String?
-  walletAddress        String // base G address; one active employee per (company, wallet)
-  defaultAmountStroops BigInt
-  groupId              String?
-  group                Group?        @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  archivedAt           DateTime?
-  checkReason          String? // null = can receive USDC; else ACCOUNT_NOT_FOUND | NO_TRUSTLINE | NOT_AUTHORIZED | TRUSTLINE_LIMIT_TOO_LOW
-  checkedAt            DateTime?
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-  items                PayrollItem[]
+  id            String        @id @default(cuid())
+  companyId     String
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name          String
+  email         String?
+  role          String?
+  walletAddress String // base G address; one active employee per (company, wallet)
+  salaryStroops BigInt
+  groupId       String?
+  group         Group?        @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  deactivatedAt DateTime? // left out of new runs; kept on old ones
+  checkReason   String? // null = can receive USDC; else ACCOUNT_NOT_FOUND | NO_TRUSTLINE | NOT_AUTHORIZED | TRUSTLINE_LIMIT_TOO_LOW
+  checkedAt     DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  items         PayrollItem[]
 
   @@index([companyId, createdAt])
   @@index([companyId, walletAddress])
 }
 
+// The run's overall status follows from its payments.
 enum RunStatus {
   DRAFT
-  PAYING
-  PAID
-  PARTIAL
+  PROCESSING
+  COMPLETED
+  PARTIALLY_PAID
   FAILED
   CANCELLED
 }
 
+// One employee payment. SUCCESSFUL is set only from a verified ledger record.
 enum ItemStatus {
   PENDING
-  SENDING
-  PAID
+  AWAITING_SIGNATURE
+  SUBMITTED
+  SUCCESSFUL
   FAILED
   CANCELLED
 }
@@ -212,6 +215,7 @@ model PayrollRun {
   walletAddress String // snapshot of the funding wallet
   assetCode     String
   assetIssuer   String
+  paymentsPerTx Int            @default(1) // 1 = every payment is its own Stellar transaction
   status        RunStatus      @default(DRAFT)
   startedAt     DateTime?
   finishedAt    DateTime?
@@ -248,7 +252,8 @@ model PayrollItem {
   txHash        String?
   ledger        Int?
   paidAt        DateTime? // ledger close time
-  attempts      Int           @default(0) // batches this line has been put in
+  verifiedAt    DateTime? // when OrgPay checked the ledger record against this payment
+  attempts      Int           @default(0) // transactions this payment has been put in
   createdAt     DateTime      @default(now())
 
   @@unique([runId, employeeId])
@@ -296,4 +301,21 @@ model PayrollEvent {
   createdAt DateTime   @default(now())
 
   @@index([runId, createdAt])
+}
+
+// A write sent with an Idempotency-Key. A repeat of the same request gets the stored response
+// back instead of running again.
+model IdempotencyKey {
+  companyId      String
+  key            String
+  route          String // "POST /v1/payroll-runs"
+  requestHash    String // SHA-256 of the method, path and JSON body
+  state          String // "IN_PROGRESS" | "DONE"
+  responseStatus Int?
+  responseBody   Json?
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+
+  @@id([companyId, key])
+  @@index([expiresAt])
 }

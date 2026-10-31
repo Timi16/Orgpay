@@ -2,6 +2,8 @@ import type { ErrorCode } from "@orgpay/shared";
 
 export const HTTP_STATUS: Record<ErrorCode, number> = {
   VALIDATION_FAILED: 400,
+  IDEMPOTENCY_KEY_REQUIRED: 400,
+  IDEMPOTENCY_KEY_REUSED: 422,
   SECRET_KEY_REJECTED: 400,
   ACCOUNT_NOT_FOUND: 400,
   INSUFFICIENT_FUNDS: 400,
@@ -16,6 +18,7 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   NOT_FOUND: 404,
   INVALID_TRANSITION: 409,
   RUN_LOCKED: 409,
+  REQUEST_IN_PROGRESS: 409,
   NOTHING_TO_PAY: 409,
   WALLET_IN_USE: 409,
   WALLET_TAKEN: 409,

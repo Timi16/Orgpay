@@ -101,7 +101,7 @@ async function main(): Promise<void> {
 
     const people: { id: string; check: { status: string; reason: string | null } }[] = [];
     for (const [name, kp, amount] of [["Ada", ada, "1200.50"], ["Bea", bea, "980"], ["Cyd", cyd, "1500.0000001"]] as const) {
-      const { employee } = await call<{ employee: (typeof people)[number] }>("POST", "/v1/employees", { name, walletAddress: kp.publicKey(), defaultAmount: amount });
+      const { employee } = await call<{ employee: (typeof people)[number] }>("POST", "/v1/employees", { name, walletAddress: kp.publicKey(), salary: amount });
       people.push(employee);
     }
     assert(people[2]?.check.reason === "NO_TRUSTLINE", "Cyd is flagged NO_TRUSTLINE on People");

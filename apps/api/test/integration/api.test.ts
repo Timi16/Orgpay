@@ -7,6 +7,7 @@ import {
   nextBatch,
   ORIGIN,
   post,
+  postOnce,
   prisma,
   resetDb,
   setupPayroll,
@@ -490,7 +491,7 @@ describe("API keys", () => {
     expect(JSON.stringify(list.body)).not.toContain(key);
 
     // API-key requests need no Origin and are attributed to "api".
-    const viaKey = await anon().post("/v1/payroll-runs").set("Authorization", `Bearer ${key}`).send({ name: "Via API", walletId: wallet.id, employeeIds: [people[0]?.id] });
+    const viaKey = await anon().post("/v1/payroll-runs").set("Authorization", `Bearer ${key}`).set("Idempotency-Key", "api-key-run-0001").send({ name: "Via API", walletId: wallet.id, employeeIds: [people[0]?.id] });
     expect(viaKey.status).toBe(201);
     expect((await prisma.payrollRun.findUniqueOrThrow({ where: { id: viaKey.body.run.id } })).createdVia).toBe("api");
     expect((await prisma.apiKey.findFirstOrThrow()).lastUsedAt).not.toBeNull();
@@ -540,7 +541,7 @@ describe("tenant isolation", () => {
     await post(b.company, `/v1/payroll-runs/${bPaying.id}/start`);
     const { batch } = await nextBatch(b.company, bPaying.id);
     const bKeyId = (await post(b.company, "/v1/api-keys", { name: "b" })).body.apiKey.id as string;
-    return { a, b, bGroup, bDraft, bPaying, bBatchId: batch?.id ?? "", bKeyId, bItemId: bDraft.items[0]?.id ?? "" };
+    return { a, b, bGroup, bDraft, bPaying, bBatchId: batch?.id ?? "", bKeyId, bItemId: bDraft.payments[0]?.id ?? "" };
   }
 
   it("people and groups: lists show only the caller's; every id route is 404", async () => {
@@ -552,12 +553,12 @@ describe("tenant isolation", () => {
     const bPerson = w.b.people[0]?.id;
     expect404(await ac.agent.get(`/v1/employees/${bPerson}`));
     expect404(await ac.agent.patch(`/v1/employees/${bPerson}`).set("Origin", ORIGIN).send({ name: "Hijacked" }));
-    expect404(await post(ac, `/v1/employees/${bPerson}/archive`));
-    expect404(await post(ac, `/v1/employees/${bPerson}/restore`));
+    expect404(await post(ac, `/v1/employees/${bPerson}/deactivate`));
+    expect404(await post(ac, `/v1/employees/${bPerson}/reactivate`));
     expect404(await ac.agent.patch(`/v1/groups/${w.bGroup.id}`).set("Origin", ORIGIN).send({ name: "Mine" }));
     expect404(await ac.agent.delete(`/v1/groups/${w.bGroup.id}`).set("Origin", ORIGIN));
     // Using B's group or person as one's own is refused too.
-    expect404(await post(ac, "/v1/employees", { name: "X", walletAddress: w.b.wallet.address, defaultAmount: "1", groupId: w.bGroup.id }));
+    expect404(await post(ac, "/v1/employees", { name: "X", walletAddress: w.b.wallet.address, salary: "1", groupId: w.bGroup.id }));
     expect((await post(ac, "/v1/employees/check", { ids: [bPerson] })).body.data).toEqual([]);
     expect((await prisma.employee.findUniqueOrThrow({ where: { id: bPerson } })).name).not.toBe("Hijacked");
   });
@@ -570,23 +571,26 @@ describe("tenant isolation", () => {
       await ac.agent.get(`/v1/payroll-runs/${w.bDraft.id}`),
       await ac.agent.get(`/v1/payroll-runs/${w.bDraft.id}/check`),
       await ac.agent.patch(`/v1/payroll-runs/${w.bDraft.id}`).set("Origin", ORIGIN).send({ name: "Mine" }),
-      await post(ac, `/v1/payroll-runs/${w.bDraft.id}/items`, { employeeIds: [w.a.people[0]?.id] }),
-      await ac.agent.patch(`/v1/payroll-runs/${w.bDraft.id}/items/${w.bItemId}`).set("Origin", ORIGIN).send({ amount: "1" }),
-      await ac.agent.delete(`/v1/payroll-runs/${w.bDraft.id}/items/${w.bItemId}`).set("Origin", ORIGIN),
+      await post(ac, `/v1/payroll-runs/${w.bDraft.id}/payments`, { employeeIds: [w.a.people[0]?.id] }),
+      await ac.agent.patch(`/v1/payroll-runs/${w.bDraft.id}/payments/${w.bItemId}`).set("Origin", ORIGIN).send({ amount: "1" }),
+      await ac.agent.delete(`/v1/payroll-runs/${w.bDraft.id}/payments/${w.bItemId}`).set("Origin", ORIGIN),
       await post(ac, `/v1/payroll-runs/${w.bDraft.id}/start`),
-      await post(ac, `/v1/payroll-runs/${w.bPaying.id}/batches/next`),
-      await post(ac, `/v1/payroll-runs/${w.bPaying.id}/batches/${w.bBatchId}/submit`, { signedXdr: "AAAA" }),
+      await post(ac, `/v1/payroll-runs/${w.bPaying.id}/transactions/next`),
+      await post(ac, `/v1/payroll-runs/${w.bPaying.id}/transactions/${w.bBatchId}/submit`, { signedXdr: "AAAA" }),
       await post(ac, `/v1/payroll-runs/${w.bPaying.id}/retry`),
       await post(ac, `/v1/payroll-runs/${w.bDraft.id}/cancel`),
+      await ac.agent.get(`/v1/payroll-runs/${w.bDraft.id}/export.csv`),
+      await ac.agent.get(`/v1/payments/${w.bItemId}`),
+      await ac.agent.get(`/v1/payments/${w.bItemId}/verify`),
       await ac.agent.delete(`/v1/payroll-runs/${w.bDraft.id}`).set("Origin", ORIGIN),
     ]) {
       expect404(res);
     }
     // A's run cannot pay from B's wallet or include B's people.
-    expect404(await post(ac, "/v1/payroll-runs", { name: "x", walletId: w.b.wallet.id }));
+    expect404(await postOnce(ac, "/v1/payroll-runs", { name: "x", walletId: w.b.wallet.id }));
     const aRun = await createRun(ac, w.a.wallet, { employeeIds: [w.a.people[0]?.id] });
-    expect((await post(ac, `/v1/payroll-runs/${aRun.id}/items`, { employeeIds: [w.b.people[0]?.id] })).status).toBe(400);
-    expect404(await post(ac, `/v1/payroll-runs/${aRun.id}/items`, { groupIds: [w.bGroup.id] }));
+    expect((await post(ac, `/v1/payroll-runs/${aRun.id}/payments`, { employeeIds: [w.b.people[0]?.id] })).status).toBe(400);
+    expect404(await post(ac, `/v1/payroll-runs/${aRun.id}/payments`, { groupIds: [w.bGroup.id] }));
     const draft = await prisma.payrollRun.findUniqueOrThrow({ where: { id: w.bDraft.id }, include: { items: true } });
     expect(draft).toMatchObject({ status: "DRAFT", name: "October payroll" });
     expect(draft.items).toHaveLength(1);
@@ -611,15 +615,15 @@ describe("tenant isolation", () => {
 });
 
 describe("platform", () => {
-  it("health reports DB status and open batches", async () => {
+  it("health reports DB status and open Stellar transactions", async () => {
     const empty = await anon().get("/health");
     expect(empty.status).toBe(200);
-    expect(empty.body).toEqual({ status: "ok", db: "up", network: "testnet", openBatches: 0 });
+    expect(empty.body).toEqual({ status: "ok", db: "up", network: "testnet", openTransactions: 0 });
     const { company, wallet, people } = await setupPayroll(t, 1);
     const run = await createRun(company, wallet, { employeeIds: [people[0]?.id] });
     await post(company, `/v1/payroll-runs/${run.id}/start`);
     await nextBatch(company, run.id);
-    expect((await anon().get("/health")).body.openBatches).toBe(1);
+    expect((await anon().get("/health")).body.openTransactions).toBe(1);
   });
 
   it("every error uses the shared shape with a request id; unknown routes are NOT_FOUND", async () => {
@@ -648,7 +652,8 @@ describe("platform", () => {
     const paths = Object.keys(spec.body.paths);
     for (const path of [
       "/v1/employees", "/v1/employees/{id}", "/v1/employees/import", "/v1/groups", "/v1/payroll-runs", "/v1/payroll-runs/{id}",
-      "/v1/payroll-runs/{id}/start", "/v1/payroll-runs/{id}/batches/next", "/v1/payroll-runs/{id}/batches/{batchId}/submit",
+      "/v1/payroll-runs/{id}/start", "/v1/payroll-runs/{id}/transactions/next", "/v1/payroll-runs/{id}/transactions/{txId}/submit",
+      "/v1/payroll-runs/{id}/export.csv", "/v1/payments/{id}", "/v1/payments/{id}/verify",
       "/v1/payroll-runs/{id}/retry", "/v1/summary", "/health",
     ]) {
       expect(paths, path).toContain(path);
@@ -702,9 +707,9 @@ describe("platform", () => {
 
   it("the 50 kb body limit holds everywhere except bulk import, which takes up to 200 kb", async () => {
     const { company } = await setupPayroll(t, 0);
-    const big = { name: "x".repeat(60_000), walletAddress: "G", defaultAmount: "1" };
+    const big = { name: "x".repeat(60_000), walletAddress: "G", salary: "1" };
     expect((await post(company, "/v1/employees", big)).status).toBe(413);
-    const rows = Array.from({ length: 400 }, (_, i) => ({ name: `Person ${i} ${"y".repeat(80)}`, walletAddress: "GBAD", defaultAmount: "1" }));
+    const rows = Array.from({ length: 400 }, (_, i) => ({ name: `Person ${i} ${"y".repeat(80)}`, walletAddress: "GBAD", salary: "1" }));
     const res = await post(company, "/v1/employees/import", { employees: rows });
     expect(res.status).toBe(400); // parsed (not 413), then refused row by row
     expect(res.body.error.code).toBe("VALIDATION_FAILED");

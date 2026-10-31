@@ -15,7 +15,7 @@ export function createGroupService(deps: AppDeps) {
   const { prisma } = deps;
 
   async function withCount(companyId: string, group: Group): Promise<GroupDto> {
-    const count = await prisma.employee.count({ where: { companyId, groupId: group.id, archivedAt: null } });
+    const count = await prisma.employee.count({ where: { companyId, groupId: group.id, deactivatedAt: null } });
     return serializeGroup(group, count);
   }
 
@@ -23,7 +23,7 @@ export function createGroupService(deps: AppDeps) {
     async list(companyId: string): Promise<GroupDto[]> {
       const [groups, counts] = await Promise.all([
         prisma.group.findMany({ where: { companyId }, orderBy: { name: "asc" } }),
-        prisma.employee.groupBy({ by: ["groupId"], where: { companyId, archivedAt: null }, _count: { _all: true } }),
+        prisma.employee.groupBy({ by: ["groupId"], where: { companyId, deactivatedAt: null }, _count: { _all: true } }),
       ]);
       const byGroup = new Map(counts.map((c) => [c.groupId, c._count._all]));
       return groups.map((g) => serializeGroup(g, byGroup.get(g.id) ?? 0));

@@ -47,9 +47,14 @@ export function buildBatchTransaction(input: {
   return { xdr: tx.toXDR(), hash: Buffer.from(tx.hash()).toString("hex"), sequence: tx.sequence };
 }
 
-/** Memo text is at most 28 bytes. */
-export function batchMemo(runNumber: number): string {
-  return `OrgPay payroll #${runNumber}`.slice(0, 28);
+/**
+ * Ties the transaction on the ledger back to its run and employee: "OrgPay R12 P3" is run #12,
+ * payment 3. A transaction with several payments names its number instead ("OrgPay R12 T2").
+ * Memo text is at most 28 bytes.
+ */
+export function transactionMemo(runNumber: number, positions: number[], txNumber: number): string {
+  const memo = positions.length === 1 ? `OrgPay R${runNumber} P${positions[0]}` : `OrgPay R${runNumber} T${txNumber}`;
+  return memo.slice(0, 28);
 }
 
 /**
@@ -66,7 +71,7 @@ export function checkSignedBatch(signedXdr: string, expected: { hash: string; so
     });
   }
   if (parsed instanceof FeeBumpTransaction || Buffer.from(parsed.hash()).toString("hex") !== expected.hash) {
-    throw new AppError("TX_MISMATCH", "This is not the transaction OrgPay built for this batch");
+    throw new AppError("TX_MISMATCH", "This is not the transaction OrgPay built for this run");
   }
   const signer = Keypair.fromPublicKey(expected.source);
   const signed = parsed.signatures.some((sig) => {

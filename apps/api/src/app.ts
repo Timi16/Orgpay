@@ -10,6 +10,7 @@ import type { Mailer } from "./lib/mailer";
 import { requireAny, requireSession, requireVerifiedEmail, sessionOnly, authOf } from "./middleware/auth";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 import { PgRateLimitStore } from "./middleware/pgRateLimitStore";
+import { idempotency } from "./middleware/idempotency";
 import { limiter } from "./middleware/rateLimit";
 import { requestId } from "./middleware/requestId";
 import { rejectNulBytes } from "./middleware/validate";
@@ -23,7 +24,7 @@ import { employeeRoutes } from "./modules/employees/routes";
 import { createEmployeeService } from "./modules/employees/service";
 import { groupRoutes } from "./modules/groups/routes";
 import { createGroupService } from "./modules/groups/service";
-import { payrollRoutes } from "./modules/payroll/routes";
+import { paymentRoutes, payrollRoutes } from "./modules/payroll/routes";
 import { createPayrollService } from "./modules/payroll/service";
 import { summaryRoutes } from "./modules/summary/routes";
 import { createSummaryService } from "./modules/summary/service";
@@ -168,14 +169,19 @@ export function buildApp(input: BuildAppDeps): BuiltApp {
   // A run check can mean a thousand Horizon lookups: these routes get their own, much lower, budget so
   // one company can't exhaust the shared Horizon allowance for everyone.
   v1.use(
-    ["/payroll-runs/:id/check", "/payroll-runs/:id/start", "/payroll-runs/:id/retry", "/payroll-runs/:id/batches/next", "/employees/check"],
+    ["/payroll-runs/:id/check", "/payroll-runs/:id/start", "/payroll-runs/:id/retry", "/payroll-runs/:id/transactions/next", "/payments/:id/verify", "/employees/check"],
     limiter({ limit: limits.stellarHeavyPerMin, key: (req) => `stellar:${authOf(req).companyId}` }),
   );
+  // Repeated writes replay the first response. Creating a run must carry a key: a repeat would
+  // otherwise make a second payroll run.
+  v1.use(idempotency(prisma, deps.logger, (req) => req.method === "POST" && req.path === "/payroll-runs"));
   v1.use("/api-keys", sessionOnly, apiKeyRoutes(createApiKeyService(deps)));
   v1.use("/wallets", sessionOnly, walletRoutes(walletService));
   v1.use("/groups", groupRoutes(createGroupService(deps)));
   v1.use("/employees", employeeRoutes(createEmployeeService(deps)));
-  v1.use("/payroll-runs", payrollRoutes(createPayrollService(deps)));
+  const payrollService = createPayrollService(deps);
+  v1.use("/payroll-runs", payrollRoutes(payrollService));
+  v1.use("/payments", paymentRoutes(payrollService));
   v1.use("/summary", summaryRoutes(createSummaryService(deps)));
   app.use("/v1", v1);
 
