@@ -36,6 +36,16 @@ export const EnvSchema = z.object({
   ALERT_TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
   ALERT_TELEGRAM_CHAT_ID: z.string().min(1).optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+}).superRefine((env, ctx) => {
+  if (env.NODE_ENV !== "production") return;
+  // Session cookies are Secure in production: an http dashboard could never sign in.
+  if (!env.WEB_ORIGIN.startsWith("https://")) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["WEB_ORIGIN"], message: "must be https:// in production" });
+  }
+  // Asking for email codes with no way to send them would silently switch them off.
+  if (env.EMAIL_VERIFICATION === "on" && !env.SMTP_URL) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["SMTP_URL"], message: "is required in production when EMAIL_VERIFICATION=on" });
+  }
 });
 export type Env = z.infer<typeof EnvSchema>;
 

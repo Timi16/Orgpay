@@ -61,7 +61,7 @@ funding wallet, to the employee's wallet, the exact amount of USDC, `op_success`
 pnpm lint && pnpm typecheck && pnpm test
 ```
 
-`pnpm test` starts a throwaway Postgres with Testcontainers and runs 111 tests against an in-memory
+`pnpm test` starts a throwaway Postgres with Testcontainers and runs 113 tests against an in-memory
 fake Stellar network, including verification (V1–V6) and repeated-request (D1–D7) cases.
 
 ## Proving it on real Testnet

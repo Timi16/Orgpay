@@ -5,9 +5,18 @@ import type { Logger } from "pino";
 import { AppError } from "../lib/errors";
 import { authOf } from "./auth";
 
-/** How long a key is remembered. A repeat after this runs as a new request. */
-export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60_000;
+/** How long a key is remembered. Long enough for retries and double clicks; a repeat after this runs as a new request. */
+export const IDEMPOTENCY_TTL_MS = 60 * 60_000;
+/** A key still IN_PROGRESS after this was abandoned (crash, lost connection): the next request with it runs. */
+export const IN_PROGRESS_STALE_MS = 2 * 60_000;
+/** Largest response kept for replay. A bigger one is kept as its resource id only. */
+export const MAX_STORED_BODY_BYTES = 64 * 1024;
 const KEY = /^[A-Za-z0-9_\-:.]{8,255}$/;
+/**
+ * Routes left out: API-key creation answers with the full key, which must never be stored, and
+ * funding wallets are unique per organization already. Paths are relative to /v1.
+ */
+const SKIPPED = ["/api-keys", "/wallets"];
 
 /** JSON with object keys sorted, so the same body always hashes the same. */
 function canonical(value: unknown): string {
@@ -24,19 +33,29 @@ function canonical(value: unknown): string {
 
 const isUniqueViolation = (err: unknown) => err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
 
+/** What is kept for replay: the body, or for a very large one just the resource it created. */
+function storable(body: unknown): Prisma.InputJsonValue | typeof Prisma.DbNull {
+  if (body === undefined) return Prisma.DbNull;
+  const text = JSON.stringify(body);
+  if (Buffer.byteLength(text) <= MAX_STORED_BODY_BYTES) return JSON.parse(text) as Prisma.InputJsonValue;
+  const run = (body as { run?: { id?: unknown } } | null)?.run;
+  return typeof run?.id === "string" ? { run: { id: run.id }, truncated: true } : { truncated: true };
+}
+
 /**
- * Idempotency-Key on writes. The first request with a key runs and its response is stored; a
- * repeat of the same request (same key, method, path and body) gets that response back without
- * running again, so a double click or a retry after a dropped connection can't do the work twice.
- * A repeat while the first is still running gets 409 REQUEST_IN_PROGRESS; the same key on a
- * different request gets 422 IDEMPOTENCY_KEY_REUSED. 5xx responses are not stored, so the client
- * can retry them. `required` names the writes that must carry a key.
+ * Idempotency-Key on writes. The first request with a key runs; if it succeeds (2xx) its answer is
+ * kept, and a repeat of the same request (same key, method, path and body) gets that answer back
+ * without running again, so a double click or a retry after a dropped connection can't do the
+ * work twice. A failed request (4xx or 5xx) frees its key, so the corrected request can use it. A
+ * repeat while the first is still running gets 409 REQUEST_IN_PROGRESS; the same key on a different
+ * request gets 422 IDEMPOTENCY_KEY_REUSED. `required` names the writes that must carry a key.
  *
  * Mounted after auth: keys belong to one company.
  */
 export function idempotency(prisma: PrismaClient, logger: Logger, required: (req: Request) => boolean) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return next();
+    if (SKIPPED.some((p) => req.path === p || req.path.startsWith(`${p}/`))) return next();
     const key = req.get("Idempotency-Key");
     if (key === undefined) {
       if (required(req)) {
@@ -54,7 +73,14 @@ export function idempotency(prisma: PrismaClient, logger: Logger, required: (req
     const requestHash = createHash("sha256").update(`${route}\n${canonical(req.body ?? null)}`).digest("hex");
     const now = new Date();
 
-    await prisma.idempotencyKey.deleteMany({ where: { companyId, key, expiresAt: { lte: now } } });
+    // Expired keys, and keys abandoned mid-request, free up for this request.
+    await prisma.idempotencyKey.deleteMany({
+      where: {
+        companyId,
+        key,
+        OR: [{ expiresAt: { lte: now } }, { state: "IN_PROGRESS", createdAt: { lt: new Date(now.getTime() - IN_PROGRESS_STALE_MS) } }],
+      },
+    });
     try {
       await prisma.idempotencyKey.create({
         data: { companyId, key, route, requestHash, state: "IN_PROGRESS", expiresAt: new Date(now.getTime() + IDEMPOTENCY_TTL_MS) },
@@ -78,27 +104,27 @@ export function idempotency(prisma: PrismaClient, logger: Logger, required: (req
       return;
     }
 
-    // Store the response before it is sent, so a repeat that arrives after it can only replay it.
-    let stored = false;
-    const store = async (status: number, body: unknown) => {
-      stored = true;
-      if (status >= 500) {
+    // Keep a successful answer before it is sent, so a repeat that arrives after it can only replay it.
+    let settled = false;
+    const settle = async (status: number, body: unknown) => {
+      settled = true;
+      if (status < 200 || status >= 300) {
         await prisma.idempotencyKey.deleteMany({ where: { companyId, key, state: "IN_PROGRESS" } });
         return;
       }
-      const responseBody = body === undefined ? Prisma.DbNull : (JSON.parse(JSON.stringify(body)) as Prisma.InputJsonValue);
-      await prisma.idempotencyKey.updateMany({ where: { companyId, key }, data: { state: "DONE", responseStatus: status, responseBody } });
+      await prisma.idempotencyKey.updateMany({ where: { companyId, key }, data: { state: "DONE", responseStatus: status, responseBody: storable(body) } });
     };
     const json = res.json.bind(res);
     res.json = (body: unknown) => {
-      store(res.statusCode, body)
+      settle(res.statusCode, body)
         .catch((err: unknown) => logger.error({ err }, "could not store the idempotent response"))
         .finally(() => json(body));
       return res;
     };
-    // Responses without a JSON body (204).
+    // Responses without a JSON body (204). A request whose handler never answers stays IN_PROGRESS
+    // and is treated as abandoned after IN_PROGRESS_STALE_MS.
     res.on("finish", () => {
-      if (!stored) store(res.statusCode, undefined).catch((err: unknown) => logger.error({ err }, "could not store the idempotent response"));
+      if (!settled) settle(res.statusCode, undefined).catch((err: unknown) => logger.error({ err }, "could not store the idempotent response"));
     });
     next();
   };

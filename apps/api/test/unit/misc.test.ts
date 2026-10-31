@@ -44,12 +44,16 @@ describe("config/env", () => {
     expect(() => loadEnv({ ...validEnv, WEB_ORIGIN: "https://orgpay.example/app/" })).toThrow(/WEB_ORIGIN/);
     expect(() => loadEnv({ ...validEnv, DATABASE_URL: undefined })).toThrow(/DATABASE_URL/);
     expect(() => loadEnv({ ...validEnv, DATABASE_URL: "" })).toThrow(/DATABASE_URL/);
+    // Production: Secure cookies need an https dashboard, and email codes need a mail server.
+    expect(() => loadEnv({ ...validEnv, NODE_ENV: "production", WEB_ORIGIN: "http://orgpay.example" })).toThrow(/WEB_ORIGIN: must be https/);
+    expect(() => loadEnv({ ...validEnv, NODE_ENV: "production", WEB_ORIGIN: "https://app.orgpay.example", EMAIL_VERIFICATION: "on" })).toThrow(/SMTP_URL/);
+    expect(loadEnv({ ...validEnv, NODE_ENV: "production", WEB_ORIGIN: "https://app.orgpay.example" }).NODE_ENV).toBe("production");
   });
 
   it(".env.example lists every variable in env.ts and nothing else", () => {
     const example = readFileSync(resolve(__dirname, "../../../../.env.example"), "utf8");
     const listed = [...example.matchAll(/^([A-Z][A-Z0-9_]*)=/gm)].map((m) => m[1]).sort();
-    expect(listed).toEqual(Object.keys(EnvSchema.shape).sort());
+    expect(listed).toEqual(Object.keys(EnvSchema.innerType().shape).sort());
   });
 });
 
@@ -118,6 +122,12 @@ describe("Stellar results", () => {
       opCodes: ["op_success", "op_no_trust", "op_line_full"],
     });
     expect(decodeResultXdr(resultXdr(true, ["op_success"]))).toEqual({ txCode: "tx_success", opCodes: ["op_success"] });
+  });
+
+  it("V7: a transaction someone wrapped in a fee bump is decoded from its inner result", () => {
+    // txFeeBumpInnerFailed around an inner txFailed of [op_success, op_no_trust], built with the SDK.
+    const bumped = "AAAAAAAAAMj////zAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAZP////8AAAACAAAAAAAAAAEAAAAAAAAAAAAAAAH////6AAAAAAAAAAA=";
+    expect(decodeResultXdr(bumped)).toEqual({ txCode: "tx_failed", opCodes: ["op_success", "op_no_trust"] });
   });
 
   it("R9: only recipient-side codes fail a line; the rest were simply not sent", () => {

@@ -121,9 +121,10 @@ export function buildApp(input: BuildAppDeps): BuiltApp {
 
   let openApiDocument: ReturnType<typeof buildOpenApiDocument> | null = null;
   app.get("/openapi.json", (req, res) => {
-    // The server URL is this API as the caller reached it, so "try it" and the samples point here.
-    openApiDocument ??= buildOpenApiDocument(`${req.protocol}://${req.get("host") ?? "localhost"}`);
-    res.json(openApiDocument);
+    // The server URL is this API as this caller reached it, so "try it" and the samples point here.
+    // It is set per response, never cached: one request's Host header can't change anyone else's.
+    openApiDocument ??= buildOpenApiDocument();
+    res.json({ ...openApiDocument, servers: [{ url: `${req.protocol}://${req.get("host") ?? "localhost"}` }] });
   });
   app.use(
     "/docs",
@@ -138,6 +139,8 @@ export function buildApp(input: BuildAppDeps): BuiltApp {
     apiReference({
       url: "/openapi.json",
       pageTitle: "OrgPay API reference",
+      // Pinned: the page runs on the API's origin, so it must never pick up a new release unreviewed.
+      cdn: "https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.75.0",
       // A plain reference: no editor toolbar, AI assistant, MCP generator or usage telemetry.
       showDeveloperTools: "never",
       agent: { disabled: true },

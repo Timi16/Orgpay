@@ -87,8 +87,10 @@ selling liabilities minus the minimum reserve ≥ fees.
 
 ## Idempotency
 
-`middleware/idempotency.ts`, on every `POST`, `PATCH` and `DELETE` under `/v1`, after auth and the
-rate limits. The dashboard sends `Idempotency-Key: <uuid>`, one per user action.
+`middleware/idempotency.ts`, on every `POST`, `PATCH` and `DELETE` under `/v1` except `/api-keys` and
+`/wallets`, after auth and the rate limits. The dashboard sends `Idempotency-Key: <uuid>` on every write
+(one per dialog for run creation). API-key routes are left out because their answer contains the key,
+which must never be stored; funding wallets are unique per organization anyway.
 
 ```
 IdempotencyKey  primary key (companyId, key)
@@ -96,7 +98,8 @@ IdempotencyKey  primary key (companyId, key)
   requestHash   SHA-256 of the route and the body as canonical JSON (key order doesn't matter)
   state         IN_PROGRESS | DONE
   responseStatus, responseBody
-  expiresAt     created + 24 h (the worker prunes expired keys)
+  expiresAt     created + 1 h (the worker prunes expired keys)
+  responseBody  the 2xx answer, or for one over 64 KB just { run: { id } } (or { truncated: true })
 ```
 
 | Case | Response |
@@ -104,11 +107,11 @@ IdempotencyKey  primary key (companyId, key)
 | No key on `POST /v1/payroll-runs` | `400 IDEMPOTENCY_KEY_REQUIRED` |
 | No key on any other write | Runs normally. |
 | Key not 8–255 of `A–Z a–z 0–9 - _ : .` | `400 VALIDATION_FAILED` |
-| New key | Stored IN_PROGRESS, the handler runs, its response is stored (DONE) before it is sent. |
+| New key | Stored IN_PROGRESS, the handler runs; a 2xx answer is stored (DONE) before it is sent. |
 | Same key, same route and body, DONE | The stored status and body, with `Idempotent-Replayed: true`. Nothing runs again. |
-| Same key, still IN_PROGRESS | `409 REQUEST_IN_PROGRESS` (`Retry-After: 1`). |
+| Same key, still IN_PROGRESS | `409 REQUEST_IN_PROGRESS` (`Retry-After: 1`). After 2 minutes the first request counts as abandoned and the key is free. |
 | Same key, different body or route | `422 IDEMPOTENCY_KEY_REUSED` |
-| The handler answered 5xx | The key is deleted, so the client can retry. 4xx answers are stored and replayed. |
+| The handler answered 4xx or 5xx | The key is deleted, so the corrected request (or a retry) can use it. |
 
 Keys belong to one organization: another organization can use the same value. Idempotency covers
 repeated HTTP requests; the payment engine's own rules (one open transaction per run, SUCCESSFUL is
@@ -239,7 +242,7 @@ One `orgpay-worker` process. Never run two.
 
 ## Tests
 
-`pnpm test`: 111 tests. Integration tests run on a real Postgres (Testcontainers) against the fake
+`pnpm test`: 113 tests. Integration tests run on a real Postgres (Testcontainers) against the fake
 Stellar network. Every case below has a test whose name starts with its ID.
 
 **Employees** (`people.test.ts`)
@@ -279,6 +282,7 @@ Stellar network. Every case below has a test whose name starts with its ID.
 - V4 A ledger record that doesn't match the payment → never SUCCESSFUL; `/verify` shows which check failed.
 - V5 COMPLETED only when every payment is SUCCESSFUL.
 - V6 `/verify` re-checks a payment on the ledger and agrees with its status.
+- V7 A transaction someone wrapped in a fee bump is judged by its inner result.
 
 **Repeated requests** (`duplicates.test.ts`)
 - D1 The same create-run request and key twice → one run, identical responses (key order in the body doesn't matter).
@@ -288,6 +292,7 @@ Stellar network. Every case below has a test whose name starts with its ID.
 - D5 Next transaction asked twice at once → one envelope.
 - D6 A delayed submit retried, and the same signed transaction sent again → each employee paid exactly once.
 - D7 Retry never re-sends a SUCCESSFUL payment; other writes replay with a key too.
+- D8 A rejected request frees its key; API-key creation is never stored; an abandoned IN_PROGRESS key frees up after 2 minutes.
 
 **System**: S1 Horizon down → 503, nothing changes. S2 Postgres down → 503. S3 Worker restart still
 settles SUBMITTED transactions. S4 Boot refuses a non-Testnet passphrase. Tenant isolation: every

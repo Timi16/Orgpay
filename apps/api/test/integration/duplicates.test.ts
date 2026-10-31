@@ -131,6 +131,25 @@ describe("repeated requests", () => {
     expect(done.events.filter((e) => e.type === "confirmed")).toHaveLength(3);
   });
 
+  it("D8: a rejected request frees its key; API keys are never stored; an abandoned key frees up", async () => {
+    const { company, wallet, people } = await setupPayroll(t, 1);
+    // Rejected (unknown employee): the user fixes the form and sends it again with the same key.
+    const bad = await postOnce(company, "/v1/payroll-runs", { name: "Fix me", walletId: wallet.id, employeeIds: ["nobody-here"] }, "fix-and-retry-01");
+    expect(bad.status).toBe(400);
+    const fixed = await postOnce(company, "/v1/payroll-runs", { name: "Fix me", walletId: wallet.id, employeeIds: [people[0]?.id] }, "fix-and-retry-01");
+    expect(fixed.status).toBe(201);
+    // Creating an API key answers with the key itself: it must not be kept for replay.
+    const created = await company.agent.post("/v1/api-keys").set("Origin", ORIGIN).set("Idempotency-Key", "api-key-create-01").send({ name: "ci" });
+    expect(created.status).toBe(201);
+    expect(await prisma.idempotencyKey.count({ where: { key: "api-key-create-01" } })).toBe(0);
+    // A request that never answered (a crash) leaves its key IN_PROGRESS; after 2 minutes it is free again.
+    await prisma.idempotencyKey.create({
+      data: { companyId: company.id, key: "abandoned-key-01", route: "POST /v1/groups", requestHash: "x", state: "IN_PROGRESS", createdAt: new Date(Date.now() - 3 * 60_000), expiresAt: new Date(Date.now() + 60_000) },
+    });
+    const after = await company.agent.post("/v1/groups").set("Origin", ORIGIN).set("Idempotency-Key", "abandoned-key-01").send({ name: "Ops" });
+    expect(after.status).toBe(201);
+  });
+
   it("D7: retrying a finished run never sends a SUCCESSFUL payment again", async () => {
     const { company, wallet, people } = await setupPayroll(t, 2);
     t.stellar.noTrustline(people[1]?.walletAddress ?? "");
