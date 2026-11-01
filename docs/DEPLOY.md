@@ -1,16 +1,16 @@
 # Deploying OrgPay to a server
 
-One Linux server runs everything: Postgres (Docker), the API, the worker and the dashboard (pm2),
-behind Caddy for HTTPS. Still Stellar Testnet only: the API refuses to start on any other network.
+One Linux server runs the backend: Postgres (Docker), the API and the worker (pm2), behind Caddy for
+HTTPS. The dashboard (`apps/web`) is hosted on Vercel. Still Stellar Testnet only: the API refuses to
+start on any other network.
 
 ## 1. Before you buy
 
-- **Server:** 2 vCPU, 4 GB RAM, 40 GB SSD, Ubuntu 24.04 (e.g. Hetzner CX22/CPX21, DigitalOcean or
-  Vultr 4 GB, about $6–12 a month). Running: Postgres ≈ 384 MB, API ≈ 150 MB, worker ≈ 120 MB,
-  dashboard ≈ 200 MB, Caddy ≈ 30 MB; `next build` peaks around 1.5 GB. 2 GB RAM works only with a
-  2 GB swapfile.
+- **Server:** 1–2 vCPU, 2 GB RAM, 20 GB SSD, Ubuntu 24.04. Running: Postgres ≈ 384 MB,
+  API ≈ 150 MB, worker ≈ 120 MB, Caddy ≈ 30 MB. Add a 2 GB swapfile for `pnpm install` and builds.
 - **A domain** (e.g. `useorgpay.xyz`). The dashboard and the API must be on the same registrable
-  domain, or the browser drops the session cookie: `app.<domain>` and `api.<domain>`.
+  domain, or the browser drops the session cookie: the dashboard on `<domain>` (Vercel) and the API
+  on `api.<domain>`.
 - **A Git remote** (e.g. a private GitHub repo) the server can pull from. The repo has none yet:
   `git remote add origin git@github.com:<you>/orgpay.git && git push -u origin main`.
 - **Email (optional but recommended):** an SMTP account (Resend, Postmark, Brevo…) for password
@@ -18,8 +18,9 @@ behind Caddy for HTTPS. Still Stellar Testnet only: the API refuses to start on 
 
 ## 2. DNS
 
-Point three A records at the server's IP: `app`, `api`, and the bare domain (`@`, plus `www` if you
-like). If you use Cloudflare, set them to **DNS only** (grey cloud): the API trusts exactly one proxy.
+Point an A record for `api` at the server's IP. The bare domain (`@`) and `www` point at Vercel
+(the records Vercel shows when you add the domain). If you use Cloudflare, set `api` to **DNS only**
+(grey cloud): the API trusts exactly one proxy.
 
 ## 3. Prepare the server (once, as root, then as `deploy`)
 
@@ -62,21 +63,26 @@ Edit `.env`:
 | `PORT` / `HOST` | `4400` / `127.0.0.1` |
 | `POSTGRES_PASSWORD` | a long random password (`openssl rand -hex 24`) |
 | `DATABASE_URL` | `postgresql://orgpay:<that password>@localhost:5438/orgpay` |
-| `WEB_ORIGIN` | `https://app.<domain>`, exactly, no trailing slash (must be https in production) |
+| `WEB_ORIGIN` | the dashboard's origin, `https://<domain>`, exactly, no trailing slash (https in production) |
 | `SESSION_SECRET` | `openssl rand -hex 32` |
 | `HORIZON_URL` / `NETWORK_PASSPHRASE` / `USDC_ISSUER` | keep the Testnet values from `.env.example` |
 | `SMTP_URL` / `MAIL_FROM` | your SMTP URL and `OrgPay <no-reply@<domain>>`, or leave `SMTP_URL` empty |
 | `EMAIL_VERIFICATION` | `auto` (on when `SMTP_URL` is set); `on` without `SMTP_URL` refuses to start |
 
-Then the dashboard's build-time settings, `apps/web/.env.production`:
+### The dashboard on Vercel
 
-```sh
-cat > apps/web/.env.production <<'EOF'
-NEXT_PUBLIC_API_URL=https://api.<domain>
-NEXT_PUBLIC_SITE_URL=https://app.<domain>
-NEXT_PUBLIC_HORIZON_URL=https://horizon-testnet.stellar.org
-EOF
-```
+Import the repo in Vercel with **Root Directory** `apps/web` (framework Next.js; Vercel runs
+`pnpm install` from the workspace root). Set these environment variables for Production, then
+redeploy: they are baked in at build time.
+
+| Variable | Value |
+|---|---|
+| `NEXT_PUBLIC_API_URL` | `https://api.<domain>` |
+| `NEXT_PUBLIC_SITE_URL` | `https://<domain>` (the same origin as `WEB_ORIGIN`) |
+| `NEXT_PUBLIC_HORIZON_URL` | `https://horizon-testnet.stellar.org` |
+
+Add `<domain>` and `www.<domain>` in Vercel and make `www` redirect to `<domain>`: the API accepts
+one origin, `WEB_ORIGIN`.
 
 ## 5. First start
 
@@ -84,7 +90,7 @@ EOF
 docker compose up -d                          # Postgres on 127.0.0.1:5438
 pnpm install --frozen-lockfile
 pnpm --filter @orgpay/api db:deploy           # create the tables
-pnpm build && pnpm build:web
+pnpm build
 pm2 start ecosystem.config.cjs && pm2 save
 pm2 startup                                   # run the command it prints, so pm2 starts on boot
 pm2 install pm2-logrotate && pm2 set pm2-logrotate:max_size 10M && pm2 set pm2-logrotate:retain 7
@@ -95,7 +101,7 @@ sudo systemctl restart caddy
 ```
 
 Check: `curl https://api.<domain>/health` answers `{"status":"ok","db":"up",...}` and
-`https://app.<domain>` shows the landing page. Sign up, add a funding wallet and pay a small run.
+`https://<domain>` (Vercel) shows the landing page. Sign up, add a funding wallet and pay a small run.
 
 ## 6. Backups and monitoring
 
@@ -111,11 +117,11 @@ Copy `~/orgpay-backups` off the server (rclone to S3/B2 or a Storage Box) and do
 
 ## 7. Deploying changes
 
-On the server: `./deploy/deploy.sh <git sha>` pulls, migrates, builds the API and the dashboard,
-reloads pm2, checks `/health` and the dashboard for 60 s, and rolls back if either stays down.
+On the server: `./deploy/deploy.sh <git sha>` pulls, migrates, builds the API and worker, reloads
+pm2, checks `/health` for 60 s, and rolls back if it stays down. Vercel deploys the dashboard on push.
 
 From GitHub: `.github/workflows/ci.yml` runs audit, lint, typecheck, tests and both builds on every
-push, then deploys `main` over SSH when these are set: secrets `DEPLOY_SSH_KEY` (a key for `deploy`),
+push, then deploys the backend from `main` over SSH when these are set: secrets `DEPLOY_SSH_KEY` (a key for `deploy`),
 `DEPLOY_HOST`, `DEPLOY_USER` (`deploy`), and the variable `DEPLOY_PATH` if the repo isn't at `~/orgpay`.
 
 ## Never on the server
